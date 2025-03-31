@@ -9,3 +9,4 @@ session/
 /tokens
 tokens
 .env
+encoded.txt
