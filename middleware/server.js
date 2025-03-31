@@ -1,7 +1,9 @@
 const express = require("express");
 const bodyParser = require("body-parser");
 const venom = require("venom-bot");
-const fetch = require("node-fetch");
+const fetch = (...args) =>
+  import("node-fetch").then(({ default: fetch }) => fetch(...args));
+
 const { HLTV } = require("hltv");
 require("dotenv").config();
 
@@ -13,7 +15,9 @@ venom.create({ session: "gvfl-bot", multidevice: true }).then((client) => {
 
   // 🔁 WhatsApp ➜ Discord
   client.onMessage(async (message) => {
-    console.log(`[📨] Message received from ${message.chatId}: ${message.body}`);
+    console.log(
+      `[📨] Message received from ${message.chatId}: ${message.body}`
+    );
 
     const fantasyRegex = /(https?:\/\/www\.hltv\.org\/fantasy\/[^\s]+)/i;
     const match = message.body.match(fantasyRegex);
@@ -29,14 +33,18 @@ venom.create({ session: "gvfl-bot", multidevice: true }).then((client) => {
         const events = await HLTV.getEvents();
         const now = Date.now();
 
-        const upcoming = events.find(e =>
-          fantasyLink.toLowerCase().includes(e.name.toLowerCase().replace(/\s+/g, "-"))
+        const upcoming = events.find((e) =>
+          fantasyLink
+            .toLowerCase()
+            .includes(e.name.toLowerCase().replace(/\s+/g, "-"))
         );
 
         if (upcoming && upcoming.dateStart) {
           eventName = upcoming.name;
 
-          const seconds = Math.floor(new Date(upcoming.dateStart).getTime() / 1000);
+          const seconds = Math.floor(
+            new Date(upcoming.dateStart).getTime() / 1000
+          );
           startsIn = `<t:${seconds}:R>`;
         }
       } catch (err) {
@@ -50,15 +58,15 @@ venom.create({ session: "gvfl-bot", multidevice: true }).then((client) => {
               `🎮 ${eventName}\n` +
               `🔗 [JOIN THE LEAGUE](${fantasyLink})\n` +
               `🕒 Starts\n${startsIn}`,
-            color: 0x00ccff
-          }
-        ]
+            color: 0x00ccff,
+          },
+        ],
       };
 
       try {
         await fetch(process.env.DISCORD_WEBHOOK_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify(embedPayload),
         });
 
