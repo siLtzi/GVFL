@@ -1,10 +1,13 @@
 const venom = require('venom-bot');
 
 venom
-  .create({
-    session: 'gvfl-bot',
-    multidevice: true,
-  })
+venom.create({
+  session: "gvfl-bot",
+  multidevice: true,
+  headless: false,
+  useChrome: true
+})
+
   .then((client) => start(client))
   .catch((err) => {
     console.error('❌ Venom error:', err);
