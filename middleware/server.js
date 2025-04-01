@@ -4,7 +4,6 @@ const venom = require("venom-bot");
 const fetch = (...args) =>
   import("node-fetch").then(({ default: fetch }) => fetch(...args));
 
-const { HLTV } = require("hltv");
 require("dotenv").config();
 
 let venomClient = null;
@@ -15,65 +14,29 @@ venom.create({ session: "gvfl-bot", multidevice: true }).then((client) => {
 
   // 🔁 WhatsApp ➜ Discord
   client.onMessage(async (message) => {
-    console.log(
-      `[📨] Message received from ${message.chatId}: ${message.body}`
-    );
+    console.log(`[📨] Message received from ${message.chatId}: ${message.body}`);
 
-    const fantasyRegex = /(https?:\/\/www\.hltv\.org\/fantasy\/[^\s]+)/i;
+    const fantasyRegex = /(https?:\/\/www\.hltv\.org\/fantasy\/\d+\/league\/\d+\/join\?secret=[^\s]+)/i;
     const match = message.body.match(fantasyRegex);
 
-    if (match) {
-      const fantasyLink = match[1];
+    if (!match) return;
 
-      // Try to get event info using HLTV
-      let eventName = "Unknown Event";
-      let startsIn = "Unknown";
+    const fantasyLink = match[1];
 
-      try {
-        const events = await HLTV.getEvents();
-        const now = Date.now();
+    const payload = {
+      content: `🟢 New fantasy league posted on WhatsApp\n🔗 [JOIN THE LEAGUE](${fantasyLink})`,
+    };
 
-        const upcoming = events.find((e) =>
-          fantasyLink
-            .toLowerCase()
-            .includes(e.name.toLowerCase().replace(/\s+/g, "-"))
-        );
+    try {
+      await fetch(process.env.DISCORD_WEBHOOK_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
 
-        if (upcoming && upcoming.dateStart) {
-          eventName = upcoming.name;
-
-          const seconds = Math.floor(
-            new Date(upcoming.dateStart).getTime() / 1000
-          );
-          startsIn = `<t:${seconds}:R>`;
-        }
-      } catch (err) {
-        console.error("Couldn't fetch HLTV event info:", err.message);
-      }
-
-      const embedPayload = {
-        embeds: [
-          {
-            description:
-              `🎮 ${eventName}\n` +
-              `🔗 [JOIN THE LEAGUE](${fantasyLink})\n` +
-              `🕒 Starts\n${startsIn}`,
-            color: 0x00ccff,
-          },
-        ],
-      };
-
-      try {
-        await fetch(process.env.DISCORD_WEBHOOK_URL, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(embedPayload),
-        });
-
-        console.log("✅ Forwarded fantasy link to Discord");
-      } catch (err) {
-        console.error("❌ Failed to send to Discord:", err.message);
-      }
+      console.log("✅ Fantasy league link forwarded to Discord");
+    } catch (err) {
+      console.error("❌ Failed to send to Discord:", err.message);
     }
   });
 });
