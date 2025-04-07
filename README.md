@@ -30,8 +30,8 @@ It tracks fantasy placements, awards points to players, and posts rich updates t
 
 ### 1. Clone and install
 ```bash
-git clone https://github.com/yourusername/gvfl-bot.git
-cd gvfl-bot
+git clone https://github.com/siLtzi/GVFL.git
+cd GVFL
 npm install
 ```
 
