@@ -92,12 +92,21 @@ venom.create({
 
 3. **Use PM2 to keep it running:**
 ```bash
-pm install -g pm2
-pm run build # if needed
-pm run start # or:
-pm2 start middleware/server.js --name gvfl-bot
+npm install -g pm2
+
+# Run both the Discord bot and WhatsApp middleware:
+pm2 start start.js --name gvfl-bot
 pm2 save
+
 ```
+4 **Start/stop the whole system**
+```bash
+pm2 restart gvfl-bot
+pm2 logs gvfl-bot
+pm2 stop gvfl-bot
+
+```
+
 
 ---
 
