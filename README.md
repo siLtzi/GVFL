@@ -147,6 +147,8 @@ Inspired by the need to track HLTV fantasy placements without manual effort.
 - Store `.env` and `tokens/` securely (never commit them).
 - Works with WhatsApp groups and Discord webhooks.
 - After everything is setup, you just need to use /fantasylink [https://www.hltv.org/fantasy/69/league/69696969/join?secret=12313123123123123123123 for example], and everything starts tracking
+> ⚠️ This project scrapes HLTV fantasy data for personal and educational purposes only. HLTV is not affiliated with this tool in any way.
+
 
 ---
 
