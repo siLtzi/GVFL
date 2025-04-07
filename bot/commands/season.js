@@ -36,15 +36,15 @@ module.exports = {
       const silver = entry.second || 0;
       const bronze = entry.third || 0;
 
-
-      return `*#${index + 1}*${spacer}**${entry.username}** – ${
+      return `*#${index + 1}*${spacer}**${entry.username}** – \`${
         entry.points
-      } points\n${spacer}${spacer}🥇${gold} 🥈${silver} 🥉${bronze}`;
+      } pts\`\n${spacer}${spacer}🥇${gold} 🥈${silver} 🥉${bronze}`;
     });
 
     const embed = new EmbedBuilder()
       .setTitle(`${season.toUpperCase()} Leaderboard`)
       .setColor(0x2b2d31)
+      .setThumbnail("https://i.imgur.com/STR5Ww3.png")
       .setDescription(leaderboardLines.slice(0, 10).join("\n\n"));
 
     await interaction.reply({ embeds: [embed] });

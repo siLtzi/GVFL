@@ -1,28 +1,36 @@
 const venom = require('venom-bot');
 
-venom
 venom.create({
-  session: "gvfl-bot",
+  session: 'gvfl-bot',
   multidevice: true,
-  headless: false,
-  useChrome: true
-})
+  headless: true,
+  useChrome: true,
+  folderNameToken: 'tokens', // <--- matches GVFL/tokens
+  disableWelcome: true,
+  logQR: false,
+  autoClose: false,
+  })
+  .then((client) => {
+    console.log('✅ Venom bot is ready!');
 
-  .then((client) => start(client))
+    // Try to dump session tokens manually
+    client.getSessionTokenBrowser().then((token) => {
+      const fs = require('fs');
+      fs.writeFileSync(
+        './tokens/gvfl-bot/session.browser.json',
+        JSON.stringify(token, null, 2)
+      );
+      console.log('📦 Session token saved manually!');
+    });
+
+    start(client);
+  })
   .catch((err) => {
     console.error('❌ Venom error:', err);
   });
 
 function start(client) {
-  console.log('✅ Venom bot is ready!');
-
   client.onMessage(async (message) => {
     console.log(`[${message.chatId}] ${message.sender.pushname}: ${message.body}`);
-
-    // Example trigger
-    if (message.body.toLowerCase().includes('fantasy')) {
-      console.log('🎯 Fantasy message detected!');
-      // You could send this to Discord or save it somewhere
-    }
   });
 }

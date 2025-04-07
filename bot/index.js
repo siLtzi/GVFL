@@ -12,8 +12,7 @@ const path = require("path");
 require("dotenv").config();
 
 const db = require("./utils/firebase");
-
-const HLTV = require("hltv");
+const { HLTV } = require("hltv"); // ✅ you're keeping this
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 client.commands = new Collection();
@@ -21,20 +20,14 @@ client.autocompleteHandlers = new Collection();
 
 const commands = [];
 const commandsPath = path.join(__dirname, "commands");
-const commandFiles = fs
-  .readdirSync(commandsPath)
-  .filter((file) => file.endsWith(".js"));
+const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith(".js"));
 
 for (const file of commandFiles) {
   const command = require(`./commands/${file}`);
-  console.log("Loading command:", command);
   client.commands.set(command.data.name, command);
-
-  // Register autocomplete if defined
   if (command.autocomplete) {
     client.autocompleteHandlers.set(command.data.name, command.autocomplete);
   }
-
   commands.push(command.data.toJSON());
 }
 
@@ -43,10 +36,7 @@ const rest = new REST({ version: "10" }).setToken(process.env.DISCORD_TOKEN);
   try {
     console.log("Refreshing slash commands...");
     await rest.put(
-      Routes.applicationGuildCommands(
-        process.env.CLIENT_ID,
-        process.env.GUILD_ID
-      ),
+      Routes.applicationGuildCommands(process.env.CLIENT_ID, process.env.GUILD_ID),
       { body: commands }
     );
     console.log("Slash commands registered.");
@@ -59,17 +49,15 @@ client.on("interactionCreate", async (interaction) => {
   if (interaction.isAutocomplete()) {
     const handler = client.autocompleteHandlers.get(interaction.commandName);
     if (!handler) return;
-
     try {
       await handler(interaction);
     } catch (err) {
       console.error("Autocomplete handler failed:", err);
     }
-    return; // Skip rest
+    return;
   }
 
   if (!interaction.isChatInputCommand()) return;
-
   const command = client.commands.get(interaction.commandName);
   if (!command) return;
 
@@ -84,21 +72,14 @@ client.on("interactionCreate", async (interaction) => {
   }
 });
 
-// 🔔 HLTV event check logic
+// 🔔 HLTV event check logic (unchanged)
 async function checkForUpcomingEvents(client, db) {
   try {
-    const events = await HLTV.HLTV.getEvents();
+    const events = await HLTV.getEvents();
     const now = DateTime.now();
 
     const blacklist = [
-      "qualifier",
-      "academy",
-      "cup",
-      "weekly",
-      "monthly",
-      "open",
-      "local",
-      "masters",
+      "qualifier", "academy", "cup", "weekly", "monthly", "open", "local", "masters"
     ];
 
     const parsePrize = (prize) => {
@@ -108,17 +89,17 @@ async function checkForUpcomingEvents(client, db) {
       return parseInt(match[1].replace(/,/g, ""));
     };
 
-    const upcoming = events.filter((event) => {
+    const upcoming = events.filter(event => {
       const startTime = DateTime.fromMillis(event.dateStart);
       const hoursUntilEvent = startTime.diff(now, "hours").hours;
-      const isBlacklisted = blacklist.some((word) =>
+      const isBlacklisted = blacklist.some(word =>
         event.name.toLowerCase().includes(word)
       );
       const prizeValue = parsePrize(event.prizePool);
 
       return (
         hoursUntilEvent > 0 &&
-        hoursUntilEvent <= 72 && // 3 days ahead just to ensure coverage
+        hoursUntilEvent <= 72 &&
         !isBlacklisted &&
         event.online !== true &&
         prizeValue >= 500000
@@ -131,14 +112,13 @@ async function checkForUpcomingEvents(client, db) {
     if (!channel) return;
 
     for (const event of upcoming) {
-      const eventRef = db.collection('eventReminders').doc(event.id.toString());
+      const eventRef = db.collection("eventReminders").doc(event.id.toString());
       const eventDoc = await eventRef.get();
 
       const startTime = DateTime.fromMillis(event.dateStart);
       const hoursUntilEvent = Math.floor(startTime.diff(now, "hours").hours);
 
       if (!eventDoc.exists) {
-        // New event, create doc
         await eventRef.set({
           name: event.name,
           dateStart: startTime.toJSDate(),
@@ -150,12 +130,13 @@ async function checkForUpcomingEvents(client, db) {
       const reminderData = eventDoc.exists ? eventDoc.data() : { remindedAt48h: false, remindedAt24h: false };
 
       const sendEmbed = async (hoursLeft) => {
-        const detailedEvent = await HLTV.HLTV.getEvent({ id: event.id });
+        const detailedEvent = await HLTV.getEvent({ id: event.id });
         const embed = new EmbedBuilder()
           .setTitle(`⏰ ${hoursLeft}h Reminder: ${event.name}`)
           .setDescription(`**${event.name}** starts in ${hoursLeft / 24} days!`)
           .setURL(`https://www.hltv.org/events/${event.id}/${event.name.toLowerCase().replace(/\s+/g, "-")}`)
           .setColor(hoursLeft === 48 ? 0xffaa00 : 0xff0000)
+          .setThumbnail("https://i.imgur.com/STR5Ww3.png")
           .addFields(
             { name: "📍 Location", value: event.location?.name || "TBA" },
             { name: "🕒 Starts (FI)", value: startTime.setZone("Europe/Helsinki").toFormat("cccc, dd LLL yyyy 'at' HH:mm") },
@@ -166,13 +147,11 @@ async function checkForUpcomingEvents(client, db) {
         await channel.send({ embeds: [embed] });
       };
 
-      // Exactly 48-hour reminder
       if (hoursUntilEvent <= 48 && hoursUntilEvent > 24 && !reminderData.remindedAt48h) {
         await sendEmbed(48);
         await eventRef.update({ remindedAt48h: true });
       }
 
-      // Exactly 24-hour reminder
       if (hoursUntilEvent <= 24 && hoursUntilEvent > 0 && !reminderData.remindedAt24h) {
         await sendEmbed(24);
         await eventRef.update({ remindedAt24h: true });
@@ -183,14 +162,9 @@ async function checkForUpcomingEvents(client, db) {
   }
 }
 
-
 client.once("ready", () => {
-  console.log(`Bot is online as ${client.user.tag}`);
-
-  // Run immediately at startup
+  console.log(`✅ Discord bot is online as ${client.user.tag}`);
   checkForUpcomingEvents(client, db);
-
-  // Schedule every hour to ensure precise reminders
   setInterval(() => checkForUpcomingEvents(client, db), 1000 * 60 * 60);
 });
 

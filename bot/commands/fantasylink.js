@@ -1,116 +1,129 @@
 const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
-const { HLTV } = require("hltv");
-const axios = require("axios");
 const { DateTime } = require("luxon");
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("fantasylink")
-    .setDescription("Add a fantasy league link for an event")
-    .addStringOption(option =>
-      option.setName("event")
-        .setDescription("Name of the HLTV event")
-        .setRequired(true)
-        .setAutocomplete(true)
-    )
-    .addStringOption(option =>
-      option.setName("link")
+    .setDescription("Add a fantasy league link to be tracked")
+    .addStringOption((option) =>
+      option
+        .setName("link")
         .setDescription("Full link to the fantasy league")
         .setRequired(true)
     ),
 
-  async autocomplete(interaction) {
-    const focused = interaction.options.getFocused().toLowerCase();
-    try {
-      const events = await HLTV.getEvents();
-      const now = Date.now();
-      const fiveDaysFromNow = now + 5 * 24 * 60 * 60 * 1000;
-
-      const filtered = events
-        .filter(e =>
-          e.dateStart &&
-          new Date(e.dateStart).getTime() >= now &&
-          new Date(e.dateStart).getTime() <= fiveDaysFromNow
-        )
-        .filter(e => e.name.toLowerCase().includes(focused))
-        .slice(0, 25)
-        .map(e => ({ name: e.name, value: e.name }));
-
-      await interaction.respond(filtered);
-    } catch (err) {
-      console.error("Autocomplete error:", err);
-      await interaction.respond([]);
-    }
-  },
-
   async execute(interaction, db) {
-    const eventName = interaction.options.getString("event");
     const fantasyLink = interaction.options.getString("link");
+    const matches = fantasyLink.match(/fantasy\/(\d+)\/league\/(\d+)/);
 
+    if (!matches) {
+      return await interaction.reply({
+        content: "❌ Invalid fantasy league link.",
+        ephemeral: true,
+      });
+    }
+
+    const fantasyId = Number(matches[1]);
+    const leagueId = Number(matches[2]);
+
+    // Get HLTV event info from the fantasy overview endpoint
+    const overviewUrl = `https://www.hltv.org/fantasy/${fantasyId}/overview/json`;
+    let eventName = "Unknown Event";
+    let isGameFinished = false;
     let startTimeText = "Unknown";
-    let hltvLink = "https://hltv.org";
     let timestamp = null;
-    let eventTeams = "Unknown Teams";
+    let eventTeams = "Unknown";
+    let hltvLink = "https://hltv.org";
 
     try {
-      const events = await HLTV.getEvents();
-      const now = Date.now();
+      const res = await fetch(overviewUrl, {
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+          Accept: "application/json",
+          "Accept-Language": "en-US,en;q=0.9",
+          Referer: `https://www.hltv.org/fantasy/${fantasyId}/league/${leagueId}`,
+        },
+      });
 
-      const upcomingEvents = events.filter(
-        e => e.dateStart && new Date(e.dateStart).getTime() >= now
-      );
+      const text = await res.text();
+      console.log("Status code:", res.status);
+      console.log("Raw response (first 300 chars):", text.slice(0, 300));
 
-      const event = upcomingEvents.find(
-        e => e.name.toLowerCase() === eventName.toLowerCase()
-      );
+      let json;
+      try {
+        json = JSON.parse(text);
+      } catch (err) {
+        console.error("❌ Failed to parse JSON:", err.message);
+        return await interaction.reply({
+          content:
+            "❌ HLTV returned unexpected data (possibly blocked or down).",
+          flags: 64, // ephemeral
+        });
+      }
 
-      if (event?.dateStart) {
-        const start = DateTime.fromMillis(event.dateStart).setZone("Europe/Helsinki");
+      eventName = json.eventName;
+      isGameFinished = json.gameFinished === true;
+
+      if (json.eventPageLink) {
+        const eventId = Number(json.eventPageLink.split("/")[2]);
+        const slug =
+          json.eventPageLink.split("/")[3] ||
+          eventName.toLowerCase().replace(/\s+/g, "-");
+        hltvLink = `https://hltv.org/events/${eventId}/${slug}`;
+      }
+
+      if (json.startDate && typeof json.startDate === "number" && json.startDate > 0) {
+        const start = DateTime.fromMillis(json.startDate).setZone("Europe/Helsinki");
         startTimeText = `<t:${Math.floor(start.toSeconds())}:R>`;
         timestamp = start.toFormat("cccc, dd LLL yyyy 'at' HH:mm");
+      } else {
+        console.warn("⚠️ No valid startDate found in HLTV overview JSON.");
+        startTimeText = "TBA";
       }
+      
 
-      if (event?.id && event?.name) {
-        const slug = event.name.toLowerCase().replace(/\s+/g, "-");
-        hltvLink = `https://hltv.org/events/${event.id}/${slug}`;
-
-        // 🔍 Fetch full event info for teams
-        try {
-          const eventDetails = await HLTV.getEvent({ id: event.id });
-          if (eventDetails.teams?.length) {
-            eventTeams = `${eventDetails.teams.length}`;
-          }
-        } catch (err) {
-          console.error("❌ Failed to fetch event details:", err.message);
-        }
+      if (Array.isArray(json.topRatedPlayers)) {
+        const uniqueTeams = new Set();
+        json.topRatedPlayers.forEach((p) => {
+          if (p.team?.name) uniqueTeams.add(p.team.name);
+        });
+        eventTeams = `${uniqueTeams.size}`;
       }
-
-      console.log("Event:", eventName);
-      console.log("Starts:", timestamp);
-      console.log("Teams:", eventTeams);
     } catch (err) {
-      console.error("❌ Error while fetching HLTV data:", err.message);
+      console.error("❌ Failed to fetch fantasy overview:", err.message);
+      return await interaction.reply({
+        content: "Failed to fetch HLTV data from link.",
+        ephemeral: true,
+      });
     }
 
-    // 💾 Save to Firebase
+    // Save to Firestore
     try {
       await db.collection("fantasyLinks").doc(eventName).set({
         eventName,
         fantasyLink,
+        fantasyId,
+        leagueId,
         hltvLink,
         readableTime: timestamp,
         teams: eventTeams,
         addedBy: interaction.user.id,
         timestamp: Date.now(),
+        processed: false,
       });
     } catch (err) {
       console.error("❌ Error saving to Firebase:", err.message);
+      return await interaction.reply({
+        content: "Failed to save to database.",
+        ephemeral: true,
+      });
     }
 
-    // 🖼 Create Discord embed
+    // Discord embed
     const embed = new EmbedBuilder()
       .setTitle(`🎮 ${eventName}`)
       .setColor(0x0099ff)
+      .setThumbnail("https://i.imgur.com/STR5Ww3.png")
       .setDescription(`🔗 [JOIN THE LEAGUE](${fantasyLink})`)
       .addFields(
         { name: "🕒 Starts", value: startTimeText },
@@ -119,16 +132,19 @@ module.exports = {
 
     await interaction.reply({ embeds: [embed] });
 
-    // 📲 Send to WhatsApp middleware
+    // Optional: send to WhatsApp middleware
     try {
-      await axios.post("http://localhost:3001/send-whatsapp", {
+      await require("axios").post("http://localhost:3001/send-whatsapp", {
         event: eventName,
         fantasyLink,
         hltvLink,
-        timestamp
+        timestamp,
       });
     } catch (err) {
-      console.error("❌ Failed to send to WhatsApp:", err.response?.data || err.message);
+      console.error(
+        "❌ Failed to send to WhatsApp:",
+        err.response?.data || err.message
+      );
     }
-  }
+  },
 };

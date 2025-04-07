@@ -30,14 +30,25 @@ module.exports = {
     const lastAction = logsSnap.docs[0];
     const data = lastAction.data();
 
-    const userRef = db.collection(`seasons/${data.season}/scores`).doc(data.userId);
-    const userDoc = await userRef.get();
-    const current = userDoc.exists ? userDoc.data() : {};
+    console.log("[UNDO] Raw log data:", data);
+
+    // Check if the userId is valid
+    if (!data.userId || typeof data.userId !== 'string') {
+      console.error("[UNDO] Invalid userId in log entry:", data.userId);
+      return await interaction.reply({
+        content: '❌ Invalid log entry: missing userId.',
+        ephemeral: true
+      });
+    }
 
     const pointsMap = { 1: 3, 2: 2, 3: 1 };
     const delta = pointsMap[data.placement];
 
-    // Reverse logic
+    // Handle undoing score action
+    const userRef = db.collection(`seasons/${data.season}/scores`).doc(data.userId);
+    const userDoc = await userRef.get();
+    const current = userDoc.exists ? userDoc.data() : {};
+
     const newPoints = data.type === 'add'
       ? Math.max((current.points || 0) - delta, 0)
       : (current.points || 0) + delta;
@@ -52,6 +63,13 @@ module.exports = {
       points: newPoints,
       [field]: newFieldVal
     });
+
+    // Handle undoing fantasyLink action
+    if (data.fantasyLink) {
+      const fantasyLinkRef = db.collection('fantasyLinks').doc(data.fantasyLink);
+      await fantasyLinkRef.delete();
+      console.log("[UNDO] Deleted fantasyLink document:", data.fantasyLink);
+    }
 
     // Delete the log entry
     await db.collection('logs').doc(lastAction.id).delete();

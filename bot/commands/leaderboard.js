@@ -42,9 +42,11 @@ module.exports = {
     );
 
     const lines = leaderboard.slice(0, 10).map((entry, index) => {
-      return `*#${index + 1}*${spacer}**${entry.username}** – **${
+      return `*#${index + 1}*${spacer}**${entry.username}** · \`${
         entry.points
-      }** points\n${spacer}${spacer}🥇${entry.first} 🥈${entry.second} 🥉${entry.third}`;
+      } pts\`\n${spacer}${spacer}🥇${entry.first} 🥈${entry.second} 🥉${
+        entry.third
+      }`;
     });
 
     // Fetch season winners
@@ -90,6 +92,7 @@ module.exports = {
     const embed = new EmbedBuilder()
       .setTitle("🏆 All-Time Leaderboard")
       .setColor(0x5865f2)
+      .setThumbnail("https://i.imgur.com/STR5Ww3.png")
       .setDescription(lines.join("\n\n") + divider + winnerSection);
 
     await interaction.reply({ embeds: [embed] });

@@ -101,6 +101,7 @@ module.exports = {
     const embed = new EmbedBuilder()
       .setTitle(`${medals[placement]} Removed ${ordinal(placement)} placement from ${username}`)
       .setColor(colorMap[placement])
+      .setThumbnail("https://i.imgur.com/STR5Ww3.png")
       .setDescription(
         `Total points: **${totalPoints}**\n\n` +
         `Season ${season} points: **${newPoints}**`

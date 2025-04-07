@@ -83,6 +83,7 @@ module.exports = {
     const embed = new EmbedBuilder()
       .setTitle(`✅ Season ${seasonName} has ended!`)
       .setColor(0x00cc66)
+      .setThumbnail("https://i.imgur.com/STR5Ww3.png")
       .setDescription(`${winnerText}${divider}${standingsText}`);
 
     await interaction.reply({ embeds: [embed] });

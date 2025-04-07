@@ -6,7 +6,7 @@ const ADMIN_USER_ID = process.env.ADMIN_ID;
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('nuke')
-    .setDescription('⚠️ Deletes all scores, winners, and logs from the database.')
+    .setDescription('⚠️ Deletes all scores, seasons, fantasyLinks, winners, and logs from the database.')
     .addBooleanOption(option =>
       option.setName('confirm')
         .setDescription('You must confirm true to execute this.')
@@ -31,14 +31,24 @@ module.exports = {
       });
     }
 
+    console.log(`[NUKE] User ID: ${userId}, Confirm: ${confirm}`);
+
+    // Helper to delete all docs in a collection
     const deleteCollection = async (path) => {
+      console.log(`[NUKE] Deleting collection: ${path}`);
       const snap = await db.collection(path).get();
+      if (snap.empty) {
+        console.log(`[NUKE] No documents found in ${path}`);
+        return;
+      }
       const batch = db.batch();
       snap.forEach(doc => batch.delete(doc.ref));
       await batch.commit();
     };
 
+    // Delete scores from all seasons
     const seasonsSnap = await db.collection('seasons').get();
+    console.log(`[NUKE] Found ${seasonsSnap.size} season(s)`);
     for (const seasonDoc of seasonsSnap.docs) {
       const seasonId = seasonDoc.id;
       const scoresSnap = await db.collection(`seasons/${seasonId}/scores`).get();
@@ -48,9 +58,12 @@ module.exports = {
       await db.collection('seasons').doc(seasonId).delete();
     }
 
+    // Delete other top-level collections
     await deleteCollection('winners');
     await deleteCollection('logs');
+    await deleteCollection('fantasyLinks');
 
-    await interaction.reply('💣 All GVFL data has been nuked. You’re now running a clean slate.');
+    console.log("[NUKE] Done!");
+    await interaction.reply('💣 All GVFL data has been nuked, including fantasy links.');
   }
 };
