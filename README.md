@@ -1,4 +1,4 @@
-# GVFL Fantasy Bot 🧠🔥
+# GVFL Fantasy Bot 
 
 This project is a custom fantasy league tracker for CS2, built using:
 - Discord bot (via Discord.js)
@@ -146,7 +146,7 @@ All slash commands are located in `/bot/commands`.
 
 ---
 
-## 🧠 Credits
+## Credits
 Inspired by the need to track HLTV fantasy placements without manual effort.
 
 ---
