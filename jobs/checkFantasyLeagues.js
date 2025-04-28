@@ -74,7 +74,7 @@ const checkFantasyLeagues = async (db) => {
       const embed = new EmbedBuilder()
         .setTitle(`🏁 ${eventName}`)
         .setColor(0x00cc99)
-        .setDescription(lines.join("\n"))
+        .setDescription(lines.join("\n\n"))
         .addFields(
           { name: "Season", value: season, inline: true },
           { name: "Added by", value: "system", inline: true }
@@ -90,11 +90,11 @@ const checkFantasyLeagues = async (db) => {
 
       // WhatsApp
       try {
-        const whatsappMsg = `🏁 ${eventName}\n` + 
+        const whatsappMsg = `🏁 ${eventName}\n\n` + 
           awarded.map((p) => {
             const medal = p.placement === 1 ? "🥇" : p.placement === 2 ? "🥈" : "🥉";
             return `${medal} Added ${ordinal(p.placement)} to ${p.username} [${p.points} pts]`;
-          }).join("\n") + `\nSeason: ${season}\nBy: system`;
+          }).join("\n") + `\n\nSeason: ${season}\nBy: system`;
 
         await fetch("http://localhost:3001/send-whatsapp", {
           method: "POST",

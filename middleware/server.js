@@ -31,9 +31,10 @@ venom
     });
 
     client.onMessage(async (message) => {
-      console.log(
-        `[📨] Message received from ${message.chatId}: ${message.body}`
-      );
+      // Only listen to your fantasy group
+      if (message.chatId !== process.env.WHATSAPP_GROUP_ID) return;
+    
+      console.log(`[📨] Message received from group: ${message.body}`);
 
       const fantasyRegex =
         /(https?:\/\/www\.hltv\.org\/fantasy\/\d+\/league\/\d+\/join\?secret=[^\s]+)/i;
@@ -187,7 +188,21 @@ app.post("/trigger-season", async (req, res) => {
 
     const sorted = scoresSnap.docs
       .map((doc) => doc.data())
-      .sort((a, b) => b.points - a.points);
+      .sort((a, b) => {
+        if (b.points !== a.points) {
+          return b.points - a.points; // Higher points first
+        }
+        if ((b.first || 0) !== (a.first || 0)) {
+          return (b.first || 0) - (a.first || 0); // More 1st places wins
+        }
+        if ((b.second || 0) !== (a.second || 0)) {
+          return (b.second || 0) - (a.second || 0); // More 2nd places wins
+        }
+        if ((b.third || 0) !== (a.third || 0)) {
+          return (b.third || 0) - (a.third || 0); // More 3rd places wins
+        }
+        return 0; // Stay tied otherwise
+      });
 
     const spacer = "\u2003";
     const lines = sorted.slice(0, 10).map((entry, i) => {
@@ -195,7 +210,9 @@ app.post("/trigger-season", async (req, res) => {
       const second = entry.second || 0;
       const third = entry.third || 0;
 
-      return `*#${i + 1}*${spacer}**${entry.username}** – \`${entry.points} pts\`\n${spacer}${spacer}🥇${first} 🥈${second} 🥉${third}`;
+      return `*#${i + 1}*${spacer}**${entry.username}** – \`${
+        entry.points
+      } pts\`\n${spacer}${spacer}🥇${first} 🥈${second} 🥉${third}`;
     });
 
     const embed = {
@@ -203,13 +220,13 @@ app.post("/trigger-season", async (req, res) => {
       description: lines.join("\n\n"),
       color: 0x2b2d31,
       thumbnail: { url: "https://i.imgur.com/STR5Ww3.png" },
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     };
 
     await fetch(process.env.DISCORD_WEBHOOK_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ embeds: [embed] })
+      body: JSON.stringify({ embeds: [embed] }),
     });
 
     console.log("✅ Season leaderboard embed sent");
@@ -219,4 +236,3 @@ app.post("/trigger-season", async (req, res) => {
     res.status(500).send("fail");
   }
 });
-

@@ -1,5 +1,6 @@
 const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
 const { DateTime } = require("luxon");
+const { HLTV } = require("hltv"); // <-- ADD THIS
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -26,7 +27,6 @@ module.exports = {
     const fantasyId = Number(matches[1]);
     const leagueId = Number(matches[2]);
 
-    // Get HLTV event info from the fantasy overview endpoint
     const overviewUrl = `https://www.hltv.org/fantasy/${fantasyId}/overview/json`;
     let eventName = "Unknown Event";
     let isGameFinished = false;
@@ -46,18 +46,15 @@ module.exports = {
       });
 
       const text = await res.text();
-      console.log("Status code:", res.status);
-      console.log("Raw response (first 300 chars):", text.slice(0, 300));
-
       let json;
+
       try {
         json = JSON.parse(text);
       } catch (err) {
-        console.error("❌ Failed to parse JSON:", err.message);
+        console.error("❌ Failed to parse HLTV JSON:", err.message);
         return await interaction.reply({
-          content:
-            "❌ HLTV returned unexpected data (possibly blocked or down).",
-          flags: 64, // ephemeral
+          content: "❌ HLTV returned unexpected data (possibly blocked or down).",
+          ephemeral: true,
         });
       }
 
@@ -70,24 +67,31 @@ module.exports = {
           json.eventPageLink.split("/")[3] ||
           eventName.toLowerCase().replace(/\s+/g, "-");
         hltvLink = `https://hltv.org/events/${eventId}/${slug}`;
-      }
 
-      if (json.startDate && typeof json.startDate === "number" && json.startDate > 0) {
-        const start = DateTime.fromMillis(json.startDate).setZone("Europe/Helsinki");
-        startTimeText = `<t:${Math.floor(start.toSeconds())}:R>`;
-        timestamp = start.toFormat("cccc, dd LLL yyyy 'at' HH:mm");
-      } else {
-        console.warn("⚠️ No valid startDate found in HLTV overview JSON.");
-        startTimeText = "TBA";
-      }
-      
+        // 🔥 GET real event data from HLTV API (start date + teams)
+        try {
+          console.log("🆔 Event ID parsed from eventPageLink:", eventId);
 
-      if (Array.isArray(json.topRatedPlayers)) {
-        const uniqueTeams = new Set();
-        json.topRatedPlayers.forEach((p) => {
-          if (p.team?.name) uniqueTeams.add(p.team.name);
-        });
-        eventTeams = `${uniqueTeams.size}`;
+          const eventData = await HLTV.getEvent({ id: eventId });
+          console.log("🧠 [HLTV API] Full eventData:", JSON.stringify(eventData, null, 2));
+
+
+          if (eventData?.dateStart) {
+            const start = DateTime.fromMillis(eventData.dateStart).setZone("Europe/Helsinki");
+            startTimeText = `<t:${Math.floor(start.toSeconds())}:R>`;
+            timestamp = start.toFormat("cccc, dd LLL yyyy 'at' HH:mm");
+          }
+           else {
+            startTimeText = "TBA";
+          }
+
+          if (Array.isArray(eventData?.teams)) {
+            eventTeams = `${eventData.teams.length}`;
+          }
+        } catch (e) {
+          console.warn("⚠️ HLTV.getEvent failed:", e.message || e);
+          startTimeText = "TBA";
+        }
       }
     } catch (err) {
       console.error("❌ Failed to fetch fantasy overview:", err.message);
@@ -97,7 +101,6 @@ module.exports = {
       });
     }
 
-    // Save to Firestore
     try {
       await db.collection("fantasyLinks").doc(eventName).set({
         eventName,
@@ -119,7 +122,8 @@ module.exports = {
       });
     }
 
-    // Discord embed
+
+    const gvflRoleMention = '<@&1026082306844282881>';
     const embed = new EmbedBuilder()
       .setTitle(`🎮 ${eventName}`)
       .setColor(0x0099ff)
@@ -130,9 +134,8 @@ module.exports = {
         { name: "🏆 Teams Attending", value: eventTeams }
       );
 
-    await interaction.reply({ embeds: [embed] });
+      await interaction.reply({ content: `${gvflRoleMention}`, embeds: [embed] });
 
-    // Optional: send to WhatsApp middleware
     try {
       await require("axios").post("http://localhost:3001/send-whatsapp", {
         event: eventName,

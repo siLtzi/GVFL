@@ -12,7 +12,7 @@ const path = require("path");
 require("dotenv").config();
 
 const db = require("./utils/firebase");
-const { HLTV } = require("hltv"); // ✅ you're keeping this
+const { HLTV } = require("hltv");
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 client.commands = new Collection();

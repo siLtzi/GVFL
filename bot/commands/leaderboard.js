@@ -37,9 +37,21 @@ module.exports = {
     });
 
     // Convert to sorted array
-    const leaderboard = Object.values(users).sort(
-      (a, b) => b.points - a.points
-    );
+    const leaderboard = Object.values(users).sort((a, b) => {
+      if (b.points !== a.points) {
+        return b.points - a.points;
+      }
+      if ((b.first || 0) !== (a.first || 0)) {
+        return (b.first || 0) - (a.first || 0);
+      }
+      if ((b.second || 0) !== (a.second || 0)) {
+        return (b.second || 0) - (a.second || 0);
+      }
+      if ((b.third || 0) !== (a.third || 0)) {
+        return (b.third || 0) - (a.third || 0);
+      }
+      return 0;
+    });
 
     const lines = leaderboard.slice(0, 10).map((entry, index) => {
       return `*#${index + 1}*${spacer}**${entry.username}** · \`${
