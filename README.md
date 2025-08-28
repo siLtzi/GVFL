@@ -26,7 +26,7 @@ It tracks fantasy placements, awards points to players, and posts rich updates t
 
 > ⚠️ You **must run the bot locally first** to scan the WhatsApp QR code before moving to server deployment.
 
-## 🔧 Setup
+##  Setup
 
 ### 1. Clone and install
 ```bash
@@ -125,7 +125,7 @@ This sets up cron entries for:
 
 ---
 
-## 💻 Commands
+##  Commands
 All slash commands are located in `/bot/commands`.
 
 ### Example commands:
