@@ -2,7 +2,7 @@
 
 This project is a custom fantasy league tracker for CS2, built using:
 - Discord bot (via Discord.js)
-- WhatsApp automation (via Venom)
+- WhatsApp automation (via whatsapp-web.js)
 - Firebase Firestore
 - HLTV fantasy league scraping
 - Cron jobs to automate everything
@@ -11,7 +11,7 @@ It tracks fantasy placements, awards points to players, and posts rich updates t
 
 ---
 
-##  Features
+## Features
 
 - Slash commands: `/addplacement`, `/leaderboard`, `/season`, etc.
 - Automated fantasy league tracking every 6–12 hours
@@ -22,11 +22,7 @@ It tracks fantasy placements, awards points to players, and posts rich updates t
 
 ---
 
-##  Quickstart (Local Development)
-
-> ⚠️ You **must run the bot locally first** to scan the WhatsApp QR code before moving to server deployment.
-
-##  Setup
+## Setup
 
 ### 1. Clone and install
 ```bash
@@ -55,58 +51,30 @@ Set your Firebase service account details and webhook IDs here.
 
 ---
 
-##  Development (VSCode/Local)
+## WhatsApp QR Setup
 
-Before deploying to a VPS, run the bot locally to scan the WhatsApp QR code:
-
-### In `server.js`, update:
-```js
-venom.create({
-  headless: "false", // ✅ Show browser for QR scanning locally
-  ...
-});
-```
-
-### Then run:
-```bash
-node middleware/server.js
-```
-Scan the QR code that appears in the browser window.
+When you first start the WhatsApp middleware on your VPS, a QR code will appear directly in your terminal (ASCII text QR).  
+Simply scan this with your WhatsApp app to link the bot — no local setup is required.
 
 ---
 
-##  Deploy to VPS
+## Deploy to VPS
 
-1. **Copy `tokens/` folder** from your local machine to the VPS after scanning the QR:
-```bash
-scp -r tokens/ root@your-vps-ip:/root/GVFL/tokens/
-```
-
-2. **Edit `server.js` on the VPS**:
-```js
-venom.create({
-  headless: "new", // ✅ Use headless mode on servers
-  ...
-});
-```
-
-3. **Use PM2 to keep it running:**
+1. **Use PM2 to keep it running:**
 ```bash
 npm install -g pm2
 
 # Run both the Discord bot and WhatsApp middleware:
 pm2 start start.js --name gvfl-bot
 pm2 save
-
 ```
-4 **Start/stop the whole system**
+
+2. **Start/stop the whole system**
 ```bash
 pm2 restart gvfl-bot
 pm2 logs gvfl-bot
 pm2 stop gvfl-bot
-
 ```
-
 
 ---
 
@@ -125,7 +93,7 @@ This sets up cron entries for:
 
 ---
 
-##  Commands
+## Commands
 All slash commands are located in `/bot/commands`.
 
 ### Example commands:
@@ -138,7 +106,7 @@ All slash commands are located in `/bot/commands`.
 
 ---
 
-##  Folders
+## Folders
 - `bot/commands` — Discord slash commands
 - `bot/utils` — Core logic: placements, standings
 - `jobs/` — Scheduled automation tasks
@@ -151,14 +119,10 @@ Inspired by the need to track HLTV fantasy placements without manual effort.
 
 ---
 
-##  Notes
-- Always run the bot locally **first** to generate `tokens/`.
+## Notes
 - Store `.env` and `tokens/` securely (never commit them).
 - Works with WhatsApp groups and Discord webhooks.
-- After everything is setup, you just need to use /fantasylink [https://www.hltv.org/fantasy/69/league/69696969/join?secret=12313123123123123123123 for example], and everything starts tracking
+- After everything is setup, you just need to use `/fantasylink [https://www.hltv.org/fantasy/69/league/69696969/join?secret=12313123123123123123123 for example]`, and everything starts tracking.
 > ⚠️ This project scrapes HLTV fantasy data for personal and educational purposes only. HLTV is not affiliated with this tool in any way.
 
-
 ---
-
-Enjoy automated HLTV fantasy tracking!
