@@ -78,7 +78,7 @@ pm2 stop gvfl-bot
 
 ---
 
-## ⏱️ Automation with Cron
+## Automation with Cron
 Fantasy leagues are checked every 12 hours, and standings are posted every 6 hours.
 
 To enable automation:
