@@ -1,0 +1,50 @@
+[
+  {
+    "domain": ".hltv.org",
+    "name": "__cf_bm",
+    "value": "VUkCNxdURAYjcjwcYsHZmo5vijVqPc.12YKgU1seGpw-1749160885-1.0.1.1-F5PxmqmvM8xBNBnGbF.zLaL73nHrqTn.mec71oftINEYcx6aaanEAMp9E2M0Qxpe4YvXzfTqS9uH.G26oygSlLhGokJeuUHYm1Z04gd7McqYZ0YtVuVfwgWm41sK.qxD",
+    "path": "/",
+    "httpOnly": true,
+    "secure": true
+  },
+  {
+    "domain": "www.hltv.org",
+    "name": "__cflb",
+    "value": "02DiuJA2sEFmcj1ss4diFx2uKMeBKSYtUsDy6vNTCdJBE",
+    "path": "/",
+    "httpOnly": true,
+    "secure": false
+  },
+  {
+    "domain": "www.hltv.org",
+    "name": "CookieConsent",
+    "value": "{stamp:'ZK0uds/c/ZrfOVXQSwrVbh72CEVkabrP2MEDDJ5dBT3YwCenY63yDQ==',necessary:true,preferences:true,statistics:true,marketing:true,method:'explicit',ver:1,utc:1748973582673,region:'fi'}",
+    "path": "/",
+    "httpOnly": false,
+    "secure": true
+  },
+  {
+    "domain": "www.hltv.org",
+    "name": "MatchFilter",
+    "value": "{\"active\":false,\"live\":false,\"stars\":1,\"lan\":false,\"teams\":[]}",
+    "path": "/",
+    "httpOnly": false,
+    "secure": false
+  },
+  {
+    "domain": "www.hltv.org",
+    "name": "nightmode",
+    "value": "on",
+    "path": "/",
+    "httpOnly": false,
+    "secure": false
+  },
+  {
+    "domain": "www.hltv.org",
+    "name": "PHPSESSID",
+    "value": "240A489AED0ABF271D009D63719B8CA3",
+    "path": "/",
+    "httpOnly": true,
+    "secure": false
+  }
+]
