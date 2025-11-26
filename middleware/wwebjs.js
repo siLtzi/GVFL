@@ -1,4 +1,3 @@
-// wwebjs.js
 require('dotenv').config();
 const { Client, LocalAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
@@ -15,7 +14,7 @@ const client = new Client({
   authStrategy: new LocalAuth({ clientId: 'gvfl-bot', dataPath: TOKENS_DIR }),
   puppeteer: {
     headless: true,
-    executablePath: puppeteer.executablePath(), // ✅ works cross-platform
+    executablePath: puppeteer.executablePath(),
     args: isLinux ? ['--no-sandbox', '--disable-dev-shm-usage'] : [],
   },
 });
@@ -49,7 +48,6 @@ client.on('change_state', state => {
 
 
 client.on('message', async (msg) => {
-  // Your Venom logic can move here with small renames
   if (msg.body === '!ping') await msg.reply('pong');
 });
 
