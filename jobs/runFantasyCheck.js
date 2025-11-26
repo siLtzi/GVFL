@@ -1,5 +1,5 @@
 const checkFantasyLeagues = require('./checkFantasyLeagues');
-const db = require('../bot/utils/firebase'); // ✅ make sure this returns db directly
+const db = require('../bot/utils/firebase'); 
 
 checkFantasyLeagues(db)
   .then(() => console.log('🎯 Finished checking leagues.'))
