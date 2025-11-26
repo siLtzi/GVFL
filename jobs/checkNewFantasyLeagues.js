@@ -5,7 +5,7 @@ const db = require("../bot/utils/firebase");
 require("dotenv").config();
 
 const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL;
-const fantasyJsonUrl = "https://www.hltv.org/fantasy/json"; // Update if needed
+const fantasyJsonUrl = "https://www.hltv.org/fantasy/json";
 
 async function checkForNewFantasyLeagues() {
   try {
@@ -70,5 +70,5 @@ async function checkForNewFantasyLeagues() {
 
 module.exports = checkForNewFantasyLeagues;
 
-// Run manually or on interval:
+
 checkForNewFantasyLeagues();
