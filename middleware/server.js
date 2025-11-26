@@ -1,4 +1,3 @@
-// server.js (migrated from Venom to whatsapp-web.js)
 require("dotenv").config();
 
 const express = require("express");
@@ -9,12 +8,10 @@ const fetch = (...args) => import("node-fetch").then(({ default: fetch }) => fet
 const fs = require("fs");
 const path = require("path");
 
-// --- WhatsApp (wwebjs) ---
 const { Client, LocalAuth } = require("whatsapp-web.js");
 const qrcode = require("qrcode-terminal");
 const puppeteer = require("puppeteer");
 
-// Log which Chromium we’ll use
 const exePath =
   process.env.PUPPETEER_EXECUTABLE_PATH || puppeteer.executablePath();
 console.log("Using Chromium at:", exePath);
@@ -53,11 +50,11 @@ const TOKENS_DIR = path.join(__dirname, "tokens", "gvfl-bot");
 waClient = new Client({
   authStrategy: new LocalAuth({
     clientId: "gvfl-bot",
-    dataPath: TOKENS_DIR, // persists under ./tokens/gvfl-bot/.wwebjs_auth
+    dataPath: TOKENS_DIR,
   }),
   puppeteer: {
     headless: true,
-    executablePath: exePath, // ✅ cross-platform chromium path
+    executablePath: exePath,
     args:
       process.platform === "linux"
         ? ["--no-sandbox", "--disable-dev-shm-usage"]
