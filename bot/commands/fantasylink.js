@@ -1,4 +1,3 @@
-// bot/commands/fantasylink.js
 const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
 const { DateTime } = require("luxon");
 const { HLTV } = require("hltv");
