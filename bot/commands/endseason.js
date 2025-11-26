@@ -66,8 +66,6 @@ module.exports = {
       active: false,
       lastSeason: seasonName,
       updatedAt: FieldValue.serverTimestamp(),
-      // Optionally clear currentSeason:
-      // currentSeason: FieldValue.delete(),
     }, { merge: true });
 
     const spacer = '\u2003';
