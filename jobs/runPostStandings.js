@@ -1,6 +1,6 @@
 const { Client, GatewayIntentBits } = require("discord.js");
 require("dotenv").config();
-const sendFantasyStandings = require("../bot/utils/sendFantasyStandings"); // ✅ fixed path
+const sendFantasyStandings = require("../bot/utils/sendFantasyStandings"); 
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 
