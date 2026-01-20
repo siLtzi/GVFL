@@ -1,5 +1,6 @@
 require('dotenv').config();
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
+const { ordinal, POINTS_MAP } = require('../utils/helpers');
 
 const ALLOWED_USERS = process.env.ALLOWED_USERS.split(',');
 
@@ -41,8 +42,7 @@ module.exports = {
       });
     }
 
-    const pointsMap = { 1: 3, 2: 2, 3: 1 };
-    const delta = pointsMap[data.placement];
+    const delta = POINTS_MAP[data.placement];
 
     // Handle undoing score action
     const userRef = db.collection(`seasons/${data.season}/scores`).doc(data.userId);
@@ -96,7 +96,3 @@ module.exports = {
     });
   }
 };
-
-function ordinal(n) {
-  return n === 1 ? '1st' : n === 2 ? '2nd' : '3rd';
-}

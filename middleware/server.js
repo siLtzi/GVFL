@@ -1,152 +1,213 @@
+// server.js (migrated from Venom to whatsapp-web.js)
+require("dotenv").config();
+
 const express = require("express");
 const bodyParser = require("body-parser");
-const venom = require("venom-bot");
 const { DateTime } = require("luxon");
-const fetch = (...args) =>
-  import("node-fetch").then(({ default: fetch }) => fetch(...args));
-require("dotenv").config();
+const fetch = (...args) => import("node-fetch").then(({ default: fetch }) => fetch(...args));
+
+const fs = require("fs");
+const path = require("path");
+
+// --- WhatsApp (wwebjs) ---
+const { Client, LocalAuth } = require("whatsapp-web.js");
+const qrcode = require("qrcode-terminal");
+const puppeteer = require("puppeteer");
+
+// Log which Chromium we’ll use
+const exePath =
+  process.env.PUPPETEER_EXECUTABLE_PATH || puppeteer.executablePath();
+console.log("Using Chromium at:", exePath);
 
 const app = express();
 app.use(bodyParser.json());
 
-let venomClient = null;
+/* -------------------- state -------------------- */
+let waClient = null;
+let ready = false;
 
-venom
-  .create({
-    session: "gvfl-bot",
-    multidevice: true,
-    headless: "new", //Change to false when starting in VSCode/local, "new" when deploying to server
-    useChrome: true,
-    folderNameToken: "tokens",
-    disableWelcome: true,
-    logQR: false,
-    autoClose: false,
-  })
-  .then((client) => {
-    venomClient = client;
-    console.log("✅ Venom client ready");
+/* -------------------- utils -------------------- */
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-    app.listen(3001, () => {
-      console.log("🌐 WhatsApp middleware listening on port 3001");
-    });
+async function safeSendMessage(client, to, text, retries = 6) {
+  for (let i = 0; i < retries; i++) {
+    try {
+      if (!ready) throw new Error("Not ready yet");
+      await sleep(150); // small settle delay
+      await client.sendMessage(to, text);
+      return;
+    } catch (e) {
+      const delay = Math.min(500 * (i + 1), 3000);
+      console.warn(
+        `⚠️ sendMessage blocked (attempt ${i + 1}/${retries}): ${e?.message || e}. Retrying in ${delay}ms`
+      );
+      await sleep(delay);
+    }
+  }
+  throw new Error("sendMessage failed after retries");
+}
 
-    client.onMessage(async (message) => {
-      // Only listen to your fantasy group
-      if (message.chatId !== process.env.WHATSAPP_GROUP_ID) return;
-    
-      console.log(`[📨] Message received from group: ${message.body}`);
+/* -------------------- WhatsApp init (wwebjs) -------------------- */
+const TOKENS_DIR = path.join(__dirname, "tokens", "gvfl-bot");
 
-      const fantasyRegex =
-        /(https?:\/\/www\.hltv\.org\/fantasy\/\d+\/league\/\d+\/join\?secret=[^\s]+)/i;
-      const match = message.body.match(fantasyRegex);
-      if (!match) return;
+waClient = new Client({
+  authStrategy: new LocalAuth({
+    clientId: "gvfl-bot",
+    dataPath: TOKENS_DIR, // persists under ./tokens/gvfl-bot/.wwebjs_auth
+  }),
+  puppeteer: {
+    headless: true,
+    executablePath: exePath, // ✅ cross-platform chromium path
+    args:
+      process.platform === "linux"
+        ? ["--no-sandbox", "--disable-dev-shm-usage"]
+        : [],
+  },
+});
 
-      const fantasyLink = match[1];
-      const { fantasyId, leagueId } = extractIdsFromLink(fantasyLink);
-      const overviewUrl = `https://www.hltv.org/fantasy/${fantasyId}/overview/json`;
+waClient.on("qr", (qr) => {
+  console.log(
+    "📲 Scan this QR with your WhatsApp app (WhatsApp → Linked devices → Link a device):"
+  );
+  qrcode.generate(qr, { small: true }); // terminal-friendly QR only
+});
 
-      try {
-        const res = await fetch(overviewUrl, {
-          headers: {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
-            Accept: "application/json",
-            "Accept-Language": "en-US,en;q=0.9",
-            Referer: `https://www.hltv.org/fantasy/${fantasyId}/league/${leagueId}`,
-          },
-        });
+waClient.on("authenticated", () => console.log("🔐 Authenticated"));
+waClient.on("auth_failure", (m) => console.error("❌ Auth failure:", m));
+waClient.on("ready", () => {
+  ready = true;
+  console.log("✅ WhatsApp ready");
+  console.log("📂 Tokens directory:", TOKENS_DIR);
+});
+waClient.on("disconnected", (reason) => {
+  ready = false;
+  console.warn("⚠️ Disconnected:", reason);
+  // Auto-reconnect after 5 seconds
+  setTimeout(() => {
+    console.log("🔄 Attempting to reconnect...");
+    waClient.initialize().catch((err) =>
+      console.error("❌ Reconnection failed:", err)
+    );
+  }, 5000);
+});
 
-        const text = await res.text();
-        const json = JSON.parse(text);
+waClient.initialize().catch((err) =>
+  console.error("❌ wwebjs init error:", err)
+);
 
-        const eventName = json.eventName || "Unknown Event";
-        let startTimeText = "TBA";
-        let timestamp = "Unknown";
+/* ---- inbound messages from WhatsApp (ported from Venom version) ---- */
+waClient.on("message", async (message) => {
+  try {
+    if (message.from !== process.env.WHATSAPP_GROUP_ID) return;
+    if (!ready) {
+      console.warn("↪︎ Message ignored: session not ready yet");
+      return;
+    }
 
-        if (
-          json.startDate &&
-          typeof json.startDate === "number" &&
-          json.startDate > 0
-        ) {
-          const start = DateTime.fromMillis(json.startDate).setZone(
-            "Europe/Helsinki"
-          );
-          startTimeText = `<t:${Math.floor(start.toSeconds())}:R>`;
-          timestamp = start.toFormat("cccc, dd LLL yyyy 'at' HH:mm");
-        }
+    console.log(`[📨] Message received from group: ${message.body}`);
 
-        const hltvLink = json.eventPageLink
-          ? `https://hltv.org${json.eventPageLink}`
-          : "https://hltv.org";
+    // Parse fantasy link
+    const fantasyRegex =
+      /(https?:\/\/www\.hltv\.org\/fantasy\/\d+\/league\/\d+\/join\?secret=[^\s]+)/i;
+    const match = message.body.match(fantasyRegex);
+    if (!match) return;
 
-        let eventTeams = "Unknown";
-        if (Array.isArray(json.topRatedPlayers)) {
-          const uniqueTeams = new Set();
-          json.topRatedPlayers.forEach((p) => {
-            if (p.team?.name) uniqueTeams.add(p.team.name);
-          });
-          eventTeams = `${uniqueTeams.size}`;
-        }
+    const fantasyLink = match[1];
+    const { fantasyId, leagueId } = extractIdsFromLink(fantasyLink);
+    const overviewUrl = `https://www.hltv.org/fantasy/${fantasyId}/overview/json`;
 
-        // Send to Discord webhook
-        const payload = {
-          embeds: [
-            {
-              title: `🎮 ${eventName}`,
-              description: `[JOIN THE LEAGUE](${fantasyLink})`,
-              color: 0x00b894,
-              thumbnail: {
-                url: "https://i.imgur.com/STR5Ww3.png",
-              },
-              fields: [
-                {
-                  name: "🕒 Starts",
-                  value: timestamp || "Unknown",
-                  inline: true,
-                },
-                { name: "🏆 Teams Attending", value: eventTeams, inline: true },
-                {
-                  name: "🌐 Event Page",
-                  value: `[View](${hltvLink})`,
-                  inline: false,
-                },
-              ],
-              timestamp: new Date().toISOString(),
-            },
-          ],
-        };
+    try {
+      const res = await fetch(overviewUrl, {
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+          Accept: "application/json",
+          "Accept-Language": "en-US,en;q=0.9",
+          Referer: `https://www.hltv.org/fantasy/${fantasyId}/league/${leagueId}`,
+        },
+      });
+      const text = await res.text();
+      const json = JSON.parse(text);
 
-        await fetch(process.env.DISCORD_WEBHOOK_URL, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        });
+      const eventName = json.eventName || "Unknown Event";
+      let timestamp = "Unknown";
 
-        console.log("✅ Fantasy league link forwarded to Discord");
-      } catch (err) {
-        console.error("❌ Failed to process fantasy link:", err.message);
+      if (json.startDate && typeof json.startDate === "number" && json.startDate > 0) {
+        const start = DateTime.fromMillis(json.startDate).setZone("Europe/Helsinki");
+        timestamp = start.toFormat("cccc, dd LLL yyyy 'at' HH:mm");
       }
-    });
-  })
-  .catch((err) => {
-    console.error("❌ Venom error:", err);
-  });
 
-const extractIdsFromLink = (url) => {
+      const hltvLink = json.eventPageLink
+        ? `https://hltv.org${json.eventPageLink}`
+        : "https://hltv.org";
+
+      let eventTeams = "Unknown";
+      if (Array.isArray(json.topRatedPlayers)) {
+        const uniqueTeams = new Set();
+        json.topRatedPlayers.forEach((p) => p.team?.name && uniqueTeams.add(p.team.name));
+        eventTeams = `${uniqueTeams.size}`;
+      }
+
+      const payload = {
+        embeds: [
+          {
+            title: `🎮 ${eventName}`,
+            description: `[JOIN THE LEAGUE](${fantasyLink})`,
+            color: 0x00b894,
+            thumbnail: { url: "https://i.imgur.com/STR5Ww3.png" },
+            fields: [
+              { name: "🕒 Starts", value: timestamp || "Unknown", inline: true },
+              { name: "🏆 Teams Attending", value: eventTeams, inline: true },
+              { name: "🌐 Event Page", value: `[View](${hltvLink})`, inline: false },
+            ],
+            timestamp: new Date().toISOString(),
+          },
+        ],
+      };
+
+      await fetch(process.env.DISCORD_WEBHOOK_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      console.log("✅ Fantasy league link forwarded to Discord");
+    } catch (err) {
+      console.error("❌ Failed to process fantasy link:", err.message);
+    }
+  } catch (e) {
+    console.error("on message error:", e?.message || e);
+  }
+});
+
+/* -------------------- helpers & routes -------------------- */
+function extractIdsFromLink(url) {
   const fantasyMatch = url.match(/fantasy\/(\d+)\//);
   const leagueMatch = url.match(/league\/(\d+)/);
   if (!fantasyMatch || !leagueMatch) throw new Error("Invalid HLTV join link");
-  return {
-    fantasyId: Number(fantasyMatch[1]),
-    leagueId: Number(leagueMatch[1]),
-  };
-};
+  return { fantasyId: Number(fantasyMatch[1]), leagueId: Number(leagueMatch[1]) };
+}
+
+// Health check for Discord command retry logic
+app.get("/wa-ready", (_req, res) => {
+  res.json({ ready, hasClient: !!waClient, me: waClient?.info?.wid?._serialized || null });
+});
+
+// General health check endpoint
+app.get("/health", (_req, res) => {
+  res.json({
+    status: "ok",
+    whatsapp: { ready, connected: !!waClient?.info?.wid },
+    uptime: process.uptime(),
+    timestamp: new Date().toISOString(),
+  });
+});
 
 // Discord ➜ WhatsApp
 app.post("/send-whatsapp", async (req, res) => {
-  if (!venomClient) return res.status(500).send("Venom not ready");
+  if (!waClient) return res.status(503).send("WhatsApp client not initialized");
+  if (!ready) return res.status(503).send("WhatsApp not connected. Scan QR first.");
 
-  const { message, event, fantasyLink, hltvLink, timestamp } = req.body;
-
+  const { message, event, fantasyLink, hltvLink, timestamp, to } = req.body;
   let finalMessage = "";
 
   if (message) {
@@ -162,7 +223,10 @@ app.post("/send-whatsapp", async (req, res) => {
   }
 
   try {
-    await venomClient.sendText(process.env.WHATSAPP_GROUP_ID, finalMessage);
+    const target = to || process.env.WHATSAPP_GROUP_ID;
+    if (!target) return res.status(400).send("Missing target (to) and WHATSAPP_GROUP_ID not set");
+
+    await safeSendMessage(waClient, target, finalMessage);
     console.log("✅ WhatsApp message sent");
     res.send("ok");
   } catch (err) {
@@ -171,7 +235,7 @@ app.post("/send-whatsapp", async (req, res) => {
   }
 });
 
-// Discord ➜ Trigger season leaderboard
+// Discord ➜ Trigger season leaderboard (kept intact)
 app.post("/trigger-season", async (req, res) => {
   const admin = require("firebase-admin");
   const db = require("../bot/utils/firebase");
@@ -189,19 +253,11 @@ app.post("/trigger-season", async (req, res) => {
     const sorted = scoresSnap.docs
       .map((doc) => doc.data())
       .sort((a, b) => {
-        if (b.points !== a.points) {
-          return b.points - a.points; // Higher points first
-        }
-        if ((b.first || 0) !== (a.first || 0)) {
-          return (b.first || 0) - (a.first || 0); // More 1st places wins
-        }
-        if ((b.second || 0) !== (a.second || 0)) {
-          return (b.second || 0) - (a.second || 0); // More 2nd places wins
-        }
-        if ((b.third || 0) !== (a.third || 0)) {
-          return (b.third || 0) - (a.third || 0); // More 3rd places wins
-        }
-        return 0; // Stay tied otherwise
+        if (b.points !== a.points) return b.points - a.points;
+        if ((b.first || 0) !== (a.first || 0)) return (b.first || 0) - (a.first || 0);
+        if ((b.second || 0) !== (a.second || 0)) return (b.second || 0) - (a.second || 0);
+        if ((b.third || 0) !== (a.third || 0)) return (b.third || 0) - (a.third || 0);
+        return 0;
       });
 
     const spacer = "\u2003";
@@ -210,9 +266,7 @@ app.post("/trigger-season", async (req, res) => {
       const second = entry.second || 0;
       const third = entry.third || 0;
 
-      return `*#${i + 1}*${spacer}**${entry.username}** – \`${
-        entry.points
-      } pts\`\n${spacer}${spacer}🥇${first} 🥈${second} 🥉${third}`;
+      return `*#${i + 1}*${spacer}**${entry.username}** – \`${entry.points} pts\`\n${spacer}${spacer}🥇${first} 🥈${second} 🥉${third}`;
     });
 
     const embed = {
@@ -236,3 +290,7 @@ app.post("/trigger-season", async (req, res) => {
     res.status(500).send("fail");
   }
 });
+
+/* -------------------- start server -------------------- */
+const PORT = process.env.WA_PORT || 3001;
+app.listen(PORT, () => console.log(`🌐 WhatsApp middleware listening on port ${PORT}`));

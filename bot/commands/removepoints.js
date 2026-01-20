@@ -1,14 +1,8 @@
 require('dotenv').config();
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
+const { ordinal, POINTS_MAP, COLOR_MAP, MEDAL_MAP } = require('../utils/helpers');
 
 const ALLOWED_USERS = process.env.ALLOWED_USERS.split(',');
-
-const pointsMap = { 1: 3, 2: 2, 3: 1 };
-const colorMap = {
-  1: 0xFFD700,
-  2: 0xC0C0C0,
-  3: 0xCD7F32
-};
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -40,7 +34,6 @@ module.exports = {
     const discordUser = interaction.options.getUser('user');
     const manualName = interaction.options.getString('name');
     const placement = interaction.options.getInteger('placement');
-    const medals = { 1: '🥇', 2: '🥈', 3: '🥉' };
 
     if (![1, 2, 3].includes(placement)) {
       return await interaction.reply({ content: 'Placement must be 1, 2, or 3.', ephemeral: true });
@@ -50,7 +43,7 @@ module.exports = {
       return await interaction.reply({ content: 'Provide either user or name.', ephemeral: true });
     }
 
-    const points = pointsMap[placement];
+    const points = POINTS_MAP[placement];
     const userId = discordUser ? discordUser.id : manualName.toLowerCase().replace(/\s+/g, '_');
     const username = discordUser ? discordUser.username : manualName;
 
@@ -99,8 +92,8 @@ module.exports = {
     }
 
     const embed = new EmbedBuilder()
-      .setTitle(`${medals[placement]} Removed ${ordinal(placement)} placement from ${username}`)
-      .setColor(colorMap[placement])
+      .setTitle(`${MEDAL_MAP[placement]} Removed ${ordinal(placement)} placement from ${username}`)
+      .setColor(COLOR_MAP[placement])
       .setThumbnail("https://i.imgur.com/STR5Ww3.png")
       .setDescription(
         `Total points: **${totalPoints}**\n\n` +
@@ -110,7 +103,3 @@ module.exports = {
     await interaction.reply({ embeds: [embed] });
   }
 };
-
-function ordinal(n) {
-  return n === 1 ? '1st' : n === 2 ? '2nd' : '3rd';
-}

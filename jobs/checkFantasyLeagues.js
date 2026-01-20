@@ -1,5 +1,6 @@
 const { getFantasyLeagueStatus, getLeaguePlacements } = require("./hltvApi");
 const awardPlacement = require("../bot/utils/awardPlacement");
+const { ordinal } = require("../bot/utils/helpers");
 const { EmbedBuilder } = require("discord.js");
 const fetch = (...args) => import("node-fetch").then(({ default: fetch }) => fetch(...args));
 
@@ -124,9 +125,5 @@ const checkFantasyLeagues = async (db) => {
 
   console.log("✅ checkFantasyLeagues finished");
 };
-
-function ordinal(n) {
-  return n === 1 ? "1st" : n === 2 ? "2nd" : "3rd";
-}
 
 module.exports = checkFantasyLeagues;

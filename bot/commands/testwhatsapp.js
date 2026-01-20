@@ -1,0 +1,59 @@
+const { SlashCommandBuilder } = require('discord.js');
+require('dotenv').config();
+
+const ALLOWED_USERS = process.env.ALLOWED_USERS.split(',');
+
+module.exports = {
+  data: new SlashCommandBuilder()
+    .setName('testwhatsapp')
+    .setDescription('📲 Admin-only: Send a test message to WhatsApp')
+    .addStringOption(option =>
+      option
+        .setName('message')
+        .setDescription('Custom message to send (optional)')
+        .setRequired(false)
+    ),
+
+  async execute(interaction, db) {
+    const userId = interaction.user.id;
+
+    if (!ALLOWED_USERS.includes(userId)) {
+      return await interaction.reply({
+        content: '❌ You are not authorized to run this command.',
+        ephemeral: true,
+      });
+    }
+
+    await interaction.deferReply({ ephemeral: true });
+
+    const customMessage = interaction.options.getString('message');
+    const testMessage = customMessage || `🧪 Test message from Discord!\n\nSent by: ${interaction.user.tag}\nTime: ${new Date().toISOString()}`;
+
+    try {
+      const fetch = (...args) => import('node-fetch').then(({ default: fetch }) => fetch(...args));
+
+      const waPort = process.env.WA_PORT || 3001;
+      const response = await fetch(`http://localhost:${waPort}/send-whatsapp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: testMessage }),
+      });
+
+      if (response.ok) {
+        await interaction.editReply({
+          content: `✅ Test message sent to WhatsApp!\n\n**Message:**\n\`\`\`${testMessage}\`\`\``,
+        });
+      } else {
+        const errorText = await response.text();
+        await interaction.editReply({
+          content: `❌ Failed to send message: ${errorText}`,
+        });
+      }
+    } catch (err) {
+      console.error('[TESTWHATSAPP ERROR]', err);
+      await interaction.editReply({
+        content: `❌ Error connecting to WhatsApp middleware: ${err.message}\n\nMake sure the WhatsApp server is running.`,
+      });
+    }
+  },
+};

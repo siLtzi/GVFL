@@ -11,7 +11,7 @@ It tracks fantasy placements, awards points to players, and posts rich updates t
 
 ---
 
-## 📦 Features
+##  Features
 
 - Slash commands: `/addplacement`, `/leaderboard`, `/season`, etc.
 - Automated fantasy league tracking every 6–12 hours
@@ -22,11 +22,11 @@ It tracks fantasy placements, awards points to players, and posts rich updates t
 
 ---
 
-## 🚀 Quickstart (Local Development)
+##  Quickstart (Local Development)
 
 > ⚠️ You **must run the bot locally first** to scan the WhatsApp QR code before moving to server deployment.
 
-## 🔧 Setup
+##  Setup
 
 ### 1. Clone and install
 ```bash
@@ -55,7 +55,7 @@ Set your Firebase service account details and webhook IDs here.
 
 ---
 
-## 🧪 Development (VSCode/Local)
+##  Development (VSCode/Local)
 
 Before deploying to a VPS, run the bot locally to scan the WhatsApp QR code:
 
@@ -75,7 +75,7 @@ Scan the QR code that appears in the browser window.
 
 ---
 
-## 🚀 Deploy to VPS
+##  Deploy to VPS
 
 1. **Copy `tokens/` folder** from your local machine to the VPS after scanning the QR:
 ```bash
@@ -125,7 +125,7 @@ This sets up cron entries for:
 
 ---
 
-## 💻 Commands
+##  Commands
 All slash commands are located in `/bot/commands`.
 
 ### Example commands:
@@ -138,7 +138,7 @@ All slash commands are located in `/bot/commands`.
 
 ---
 
-## 📦 Folders
+##  Folders
 - `bot/commands` — Discord slash commands
 - `bot/utils` — Core logic: placements, standings
 - `jobs/` — Scheduled automation tasks
@@ -151,7 +151,7 @@ Inspired by the need to track HLTV fantasy placements without manual effort.
 
 ---
 
-## 🛡️ Notes
+##  Notes
 - Always run the bot locally **first** to generate `tokens/`.
 - Store `.env` and `tokens/` securely (never commit them).
 - Works with WhatsApp groups and Discord webhooks.

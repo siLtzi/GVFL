@@ -10,3 +10,10 @@ session/
 tokens
 .env
 encoded.txt
+chrome/
+chrome-win/
+*.zip
+tokens_slim/
+middleware/tokens/
+*.lock
+.wwebjs_cache/
