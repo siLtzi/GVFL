@@ -18,7 +18,6 @@ const HEADERS = {
 
 const cookiesPath = path.join(__dirname, 'cookies.json');
 let browserPromise = null;
-let pagePromise = null;
 
 function isCloudflareBlock(text = '') {
   const lower = text.toLowerCase();
@@ -29,7 +28,7 @@ function isCloudflareBlock(text = '') {
   );
 }
 
-async function getBrowserPage() {
+async function getBrowser() {
   if (!browserPromise) {
     browserPromise = puppeteer.launch({
       headless: 'new',
@@ -44,60 +43,62 @@ async function getBrowserPage() {
     });
   }
 
-  if (!pagePromise) {
-    pagePromise = (async () => {
-      const browser = await browserPromise;
-      const page = await browser.newPage();
-      await page.setViewport({ width: 1920, height: 1080 });
-      await page.setUserAgent(HEADERS['User-Agent']);
-
-      if (fs.existsSync(cookiesPath)) {
-        try {
-          const cookies = JSON.parse(fs.readFileSync(cookiesPath, 'utf8'));
-          if (Array.isArray(cookies) && cookies.length) {
-            await page.setCookie(...cookies);
-          }
-        } catch (err) {
-          console.warn('Could not load HLTV cookies:', err.message);
-        }
-      }
-
-      return page;
-    })();
-  }
-
-  return pagePromise;
+  return browserPromise;
 }
 
-async function fetchJsonViaBrowser(url) {
-  const page = await getBrowserPage();
+async function openBrowserPage() {
+  const browser = await getBrowser();
+  const page = await browser.newPage();
+  await page.setViewport({ width: 1920, height: 1080 });
+  await page.setUserAgent(HEADERS['User-Agent']);
 
-  // Hit base domain first to complete any Cloudflare checks
-  await page.goto('https://www.hltv.org/', { waitUntil: 'networkidle2', timeout: 60000 });
-  await page.waitForTimeout(3000);
-
-  await page.goto(url, { waitUntil: 'networkidle2', timeout: 60000 });
-  await page.waitForTimeout(1500);
-
-  const bodyText = await page.evaluate(() => document.body.innerText || '');
-  if (isCloudflareBlock(bodyText)) {
-    await page.waitForTimeout(8000);
-    const retryText = await page.evaluate(() => document.body.innerText || '');
-    if (isCloudflareBlock(retryText)) {
-      throw new Error('Blocked by Cloudflare (headless)');
+  if (fs.existsSync(cookiesPath)) {
+    try {
+      const cookies = JSON.parse(fs.readFileSync(cookiesPath, 'utf8'));
+      if (Array.isArray(cookies) && cookies.length) {
+        await page.setCookie(...cookies);
+      }
+    } catch (err) {
+      console.warn('Could not load HLTV cookies:', err.message);
     }
   }
 
-  const json = JSON.parse(bodyText);
+  return page;
+}
+
+async function fetchJsonViaBrowser(url) {
+  const page = await openBrowserPage();
 
   try {
-    const cookies = await page.cookies();
-    fs.writeFileSync(cookiesPath, JSON.stringify(cookies, null, 2));
-  } catch (err) {
-    console.warn('Failed to save HLTV cookies:', err.message);
-  }
+    // Hit base domain first to complete any Cloudflare checks
+    await page.goto('https://www.hltv.org/', { waitUntil: 'domcontentloaded', timeout: 60000 });
+    await page.waitForTimeout(3000);
 
-  return json;
+    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
+    await page.waitForTimeout(1500);
+
+    const bodyText = await page.evaluate(() => document.body.innerText || '');
+    if (isCloudflareBlock(bodyText)) {
+      await page.waitForTimeout(8000);
+      const retryText = await page.evaluate(() => document.body.innerText || '');
+      if (isCloudflareBlock(retryText)) {
+        throw new Error('Blocked by Cloudflare (headless)');
+      }
+    }
+
+    const json = JSON.parse(bodyText);
+
+    try {
+      const cookies = await page.cookies();
+      fs.writeFileSync(cookiesPath, JSON.stringify(cookies, null, 2));
+    } catch (err) {
+      console.warn('Failed to save HLTV cookies:', err.message);
+    }
+
+    return json;
+  } finally {
+    await page.close();
+  }
 }
 
 async function fetchJsonWithFallback(url) {
