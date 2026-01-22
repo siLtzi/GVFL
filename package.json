@@ -3,7 +3,8 @@
   "version": "1.0.0",
   "main": "start.js",
   "scripts": {
-    "start": "node start.js"
+    "start": "node start.js",
+    "fetcher": "node jobs/fetcherServer.js"
   },
   "dependencies": {
     "axios": "^1.8.4",

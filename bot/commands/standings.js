@@ -1,6 +1,5 @@
 require('dotenv').config();
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
-const { getLeaguePlacements, getFantasyLeagueStatus } = require('../../jobs/hltvApi');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -22,49 +21,55 @@ module.exports = {
       const embeds = [];
 
       for (const doc of activeLeagues) {
-        const { fantasyId, leagueId, eventName } = doc.data();
+        const { eventName } = doc.data();
+        const cacheRef = db.collection('standingsCache').doc(eventName);
+        const cacheDoc = await cacheRef.get();
 
-        let placements;
-        let status;
-
-        try {
-          [placements, status] = await Promise.all([
-            getLeaguePlacements(fantasyId, leagueId),
-            getFantasyLeagueStatus(fantasyId),
-          ]);
-        } catch (err) {
-          console.error(`❌ Failed to fetch ${eventName}:`, err.message);
-          continue;
-        }
+        const cacheData = cacheDoc.exists ? cacheDoc.data() : null;
+        const placements = cacheData?.placements || [];
+        const status = cacheData?.status || null;
 
         const spacer = '\u2003';
         const pointsMap = { 1: 10, 2: 6, 3: 4, 4: 3, 5: 2, 6: 1 };
-        
-        const lines = placements.slice(0, 10).map((p, i) => {
-          const placement = i + 1;
-          let medal = '';
-          if (placement === 1) medal = '🥇';
-          else if (placement === 2) medal = '🥈';
-          else if (placement === 3) medal = '🥉';
-          else if (placement <= 6) medal = `${placement}.`;
-          else medal = `${placement}.`;
 
-          const gvflPoints = pointsMap[placement] || 0;
-          const pointsInfo = placement <= 6 ? ` → \`+${gvflPoints} GVFL\`` : '';
+        const lines = placements.length
+          ? placements.slice(0, 10).map((p, i) => {
+              const placement = i + 1;
+              let medal = '';
+              if (placement === 1) medal = '🥇';
+              else if (placement === 2) medal = '🥈';
+              else if (placement === 3) medal = '🥉';
+              else if (placement <= 6) medal = `${placement}.`;
+              else medal = `${placement}.`;
 
-          return `${medal}${spacer}**${p.username}** • \`${p.totalPoints} pts\`${pointsInfo}`;
-        });
+              const gvflPoints = pointsMap[placement] || 0;
+              const pointsInfo = placement <= 6 ? ` → \`+${gvflPoints} GVFL\`` : '';
 
-        const statusText = status.isGameFinished 
-          ? '✅ Event finished' 
-          : `🎮 ${status.isGameStarted ? 'In progress' : 'Not started'}`;
+              return `${medal}${spacer}**${p.username}** • \`${p.totalPoints} pts\`${pointsInfo}`;
+            })
+          : ['⚠️ No cached standings yet.'];
+
+        let statusText = '⏳ Status unknown';
+        if (status) {
+          statusText = status.isGameFinished
+            ? '✅ Event finished'
+            : `🎮 ${status.isGameStarted ? 'In progress' : 'Not started'}`;
+        }
+
+        const updatedAt = cacheData?.updatedAt?.toDate?.()
+          ? cacheData.updatedAt.toDate().toLocaleString()
+          : 'Unknown';
+        const lastError = cacheData?.lastError ? `\n\nLast error: ${cacheData.lastError}` : '';
 
         const embed = new EmbedBuilder()
           .setTitle(`📊 ${eventName}`)
-          .setColor(status.isGameFinished ? 0x00cc99 : 0x5865f2)
+          .setColor(status?.isGameFinished ? 0x00cc99 : 0x5865f2)
           .setThumbnail('https://i.imgur.com/STR5Ww3.png')
           .setDescription(lines.join('\n\n'))
-          .addFields({ name: 'Status', value: statusText, inline: true })
+          .addFields(
+            { name: 'Status', value: statusText, inline: true },
+            { name: 'Last update', value: `${updatedAt}${lastError}`, inline: true }
+          )
           .setFooter({ text: 'GVFL Fantasy Tracker' })
           .setTimestamp();
 

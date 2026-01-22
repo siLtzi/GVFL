@@ -6,7 +6,7 @@ const path = require('path');
 
 puppeteer.use(StealthPlugin());
 
-const HEADERS = {
+const BASE_HEADERS = {
   'User-Agent':
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
   'Accept': 'application/json, text/plain, */*',
@@ -17,6 +17,9 @@ const HEADERS = {
 };
 
 const cookiesPath = path.join(__dirname, 'cookies.json');
+const FETCHER_BASE = process.env.HLTV_FETCHER_URL
+  ? process.env.HLTV_FETCHER_URL.replace(/\/+$/, '')
+  : '';
 let browserPromise = null;
 let browserQueue = Promise.resolve();
 
@@ -72,7 +75,7 @@ async function openBrowserPage() {
   const browser = await getBrowser();
   const page = await browser.newPage();
   await page.setViewport({ width: 1920, height: 1080 });
-  await page.setUserAgent(HEADERS['User-Agent']);
+  await page.setUserAgent(BASE_HEADERS['User-Agent']);
 
   if (fs.existsSync(cookiesPath)) {
     try {
@@ -86,6 +89,23 @@ async function openBrowserPage() {
   }
 
   return page;
+}
+
+function loadCookieHeader() {
+  if (process.env.HLTV_COOKIE && process.env.HLTV_COOKIE.trim()) {
+    return process.env.HLTV_COOKIE.trim();
+  }
+
+  if (!fs.existsSync(cookiesPath)) return '';
+
+  try {
+    const cookies = JSON.parse(fs.readFileSync(cookiesPath, 'utf8'));
+    if (!Array.isArray(cookies)) return '';
+    return cookies.map(c => `${c.name}=${c.value}`).join('; ');
+  } catch (err) {
+    console.warn('Could not read HLTV cookies:', err.message);
+    return '';
+  }
 }
 
 function runBrowserTask(task) {
@@ -145,10 +165,26 @@ async function fetchJsonWithFallback(url, { ttlMs } = {}) {
   const cached = getCached(url);
   if (cached) return cached;
 
+  if (FETCHER_BASE) {
+    const fetcherUrl = `${FETCHER_BASE}/raw?url=${encodeURIComponent(url)}`;
+    const res = await fetch(fetcherUrl, { headers: { Accept: 'application/json' } });
+    if (!res.ok) {
+      throw new Error(`Fetcher failed: ${res.status} ${res.statusText}`);
+    }
+    const json = await res.json();
+    setCached(url, json, ttlMs);
+    return json;
+  }
+
   let lastError;
   for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
-      const res = await fetch(url, { headers: HEADERS });
+      const cookieHeader = loadCookieHeader();
+      const headers = cookieHeader
+        ? { ...BASE_HEADERS, Cookie: cookieHeader }
+        : { ...BASE_HEADERS };
+
+      const res = await fetch(url, { headers });
 
       if (res.ok) {
         const json = await res.json();
@@ -211,4 +247,5 @@ async function getFantasyLeagueStatus(fantasyId) {
 module.exports = {
   getLeaguePlacements,
   getFantasyLeagueStatus,
+  fetchJsonWithFallback,
 };

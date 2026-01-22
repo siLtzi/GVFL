@@ -1,5 +1,6 @@
 const { EmbedBuilder } = require("discord.js");
-const { getLeaguePlacements } = require("../../jobs/hltvApi");
+const admin = require("firebase-admin");
+const { getLeaguePlacements, getFantasyLeagueStatus } = require("../../jobs/hltvApi");
 const db = require("./firebase"); // ✅ fixed import path
 
 module.exports = async function sendFantasyStandings(client) {
@@ -12,14 +13,26 @@ module.exports = async function sendFantasyStandings(client) {
 
   for (const doc of activeLeagues) {
     const { fantasyId, leagueId, eventName } = doc.data();
+    const cacheRef = db.collection("standingsCache").doc(eventName);
 
     let placements;
+    let status;
     try {
-      placements = await getLeaguePlacements(fantasyId, leagueId);
+      [placements, status] = await Promise.all([
+        getLeaguePlacements(fantasyId, leagueId),
+        getFantasyLeagueStatus(fantasyId),
+      ]);
     } catch (err) {
       console.error(
         `❌ Failed to fetch placements for ${eventName}:`,
         err.message
+      );
+      await cacheRef.set(
+        {
+          lastError: err.message,
+          lastAttemptAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true }
       );
       continue;
     }
@@ -30,10 +43,9 @@ module.exports = async function sendFantasyStandings(client) {
       continue;
     }
 
-    const standingsRef = db.collection("standings").doc(eventName);
-    const standingsDoc = await standingsRef.get();
-    const prevData = standingsDoc.exists
-      ? standingsDoc.data().placements || []
+    const cacheDoc = await cacheRef.get();
+    const prevData = cacheDoc.exists
+      ? cacheDoc.data().placements || []
       : [];
 
     const hasChanges = placements.some((p) => {
@@ -44,6 +56,16 @@ module.exports = async function sendFantasyStandings(client) {
     if (!hasChanges) {
       console.log(
         `⏸️ No changes in standings for ${eventName}, not posting update.`
+      );
+      await cacheRef.set(
+        {
+          placements,
+          status,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          lastAttemptAt: admin.firestore.FieldValue.serverTimestamp(),
+          lastError: admin.firestore.FieldValue.delete(),
+        },
+        { merge: true }
       );
       continue;
     }
@@ -84,7 +106,16 @@ module.exports = async function sendFantasyStandings(client) {
       .setTimestamp();
 
     await channel.send({ embeds: [embed] });
-    await standingsRef.set({ placements }, { merge: true });
+    await cacheRef.set(
+      {
+        placements,
+        status,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        lastAttemptAt: admin.firestore.FieldValue.serverTimestamp(),
+        lastError: admin.firestore.FieldValue.delete(),
+      },
+      { merge: true }
+    );
 
     console.log(`✅ Fantasy standings posted for ${eventName}.`);
   }
