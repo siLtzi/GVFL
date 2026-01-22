@@ -16,8 +16,6 @@
     "luxon": "^3.6.0",
     "node-fetch": "^3.3.2",
     "puppeteer": "^24.19.0",
-    "puppeteer-extra": "^3.3.6",
-    "puppeteer-extra-plugin-stealth": "^2.11.2",
     "qrcode-terminal": "^0.12.0",
     "whatsapp-web.js": "github:pedroslopez/whatsapp-web.js#main"
   },
