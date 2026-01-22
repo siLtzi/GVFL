@@ -38,7 +38,7 @@ module.exports = {
     try {
       const res = await fetch(overviewUrl, {
         headers: {
-          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+          "User-Agent": "curl/8.12.1",
           Accept: "application/json",
           "Accept-Language": "en-US,en;q=0.9",
           Referer: `https://www.hltv.org/fantasy/${fantasyId}/league/${leagueId}`,

@@ -4,7 +4,7 @@ const path = require('path');
 
 const BASE_HEADERS = {
   'User-Agent':
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+    'curl/8.12.1',
   'Accept': 'application/json, text/plain, */*',
   'Accept-Language': 'en-US,en;q=0.9',
   'Referer': 'https://www.hltv.org/',
@@ -97,6 +97,7 @@ async function fetchJsonWithFallback(url, { ttlMs } = {}) {
 
       const text = await res.text();
       if (res.status === 403 || isCloudflareBlock(text)) {
+        lastError = new Error(`Access denied (403/Cloudflare) - ${url}`);
         break;
       }
 
