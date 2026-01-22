@@ -103,14 +103,14 @@ async function fetchJsonViaBrowser(url) {
     try {
       // Hit base domain first to complete any Cloudflare checks
       await page.goto('https://www.hltv.org/', { waitUntil: 'domcontentloaded', timeout: 60000 });
-      await page.waitForTimeout(3000);
+      await delay(3000);
 
       await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
-      await page.waitForTimeout(1500);
+      await delay(1500);
 
       const bodyText = await page.evaluate(() => document.body.innerText || '');
       if (isCloudflareBlock(bodyText)) {
-        await page.waitForTimeout(8000);
+        await delay(8000);
         const retryText = await page.evaluate(() => document.body.innerText || '');
         if (isCloudflareBlock(retryText)) {
           throw new Error('Blocked by Cloudflare (headless)');
