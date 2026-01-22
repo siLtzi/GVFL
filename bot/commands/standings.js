@@ -22,7 +22,7 @@ module.exports = {
 
       for (const doc of activeLeagues) {
         const { eventName } = doc.data();
-        const cacheRef = db.collection('standingsCache').doc(eventName);
+        const cacheRef = db.collection('standings').doc(eventName);
         const cacheDoc = await cacheRef.get();
 
         const cacheData = cacheDoc.exists ? cacheDoc.data() : null;

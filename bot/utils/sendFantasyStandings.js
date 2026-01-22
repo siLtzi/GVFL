@@ -13,7 +13,7 @@ module.exports = async function sendFantasyStandings(client) {
 
   for (const doc of activeLeagues) {
     const { fantasyId, leagueId, eventName } = doc.data();
-    const cacheRef = db.collection("standingsCache").doc(eventName);
+    const cacheRef = db.collection("standings").doc(eventName);
 
     let placements;
     let status;
