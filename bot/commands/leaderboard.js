@@ -27,6 +27,9 @@ module.exports = {
           first: 0,
           second: 0,
           third: 0,
+          fourth: 0,
+          fifth: 0,
+          sixth: 0,
         };
       }
 
@@ -34,6 +37,9 @@ module.exports = {
       users[id].first += data.first || 0;
       users[id].second += data.second || 0;
       users[id].third += data.third || 0;
+      users[id].fourth += data.fourth || 0;
+      users[id].fifth += data.fifth || 0;
+      users[id].sixth += data.sixth || 0;
     });
 
     // Convert to sorted array
@@ -50,6 +56,15 @@ module.exports = {
       if ((b.third || 0) !== (a.third || 0)) {
         return (b.third || 0) - (a.third || 0);
       }
+      if ((b.fourth || 0) !== (a.fourth || 0)) {
+        return (b.fourth || 0) - (a.fourth || 0);
+      }
+      if ((b.fifth || 0) !== (a.fifth || 0)) {
+        return (b.fifth || 0) - (a.fifth || 0);
+      }
+      if ((b.sixth || 0) !== (a.sixth || 0)) {
+        return (b.sixth || 0) - (a.sixth || 0);
+      }
       return 0;
     });
 
@@ -58,7 +73,7 @@ module.exports = {
         entry.points
       } pts\`\n${spacer}${spacer}🥇${entry.first} 🥈${entry.second} 🥉${
         entry.third
-      }`;
+      } 4️⃣${entry.fourth || 0} 5️⃣${entry.fifth || 0} 6️⃣${entry.sixth || 0}`;
     });
 
     // Fetch season winners

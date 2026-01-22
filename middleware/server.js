@@ -257,6 +257,9 @@ app.post("/trigger-season", async (req, res) => {
         if ((b.first || 0) !== (a.first || 0)) return (b.first || 0) - (a.first || 0);
         if ((b.second || 0) !== (a.second || 0)) return (b.second || 0) - (a.second || 0);
         if ((b.third || 0) !== (a.third || 0)) return (b.third || 0) - (a.third || 0);
+        if ((b.fourth || 0) !== (a.fourth || 0)) return (b.fourth || 0) - (a.fourth || 0);
+        if ((b.fifth || 0) !== (a.fifth || 0)) return (b.fifth || 0) - (a.fifth || 0);
+        if ((b.sixth || 0) !== (a.sixth || 0)) return (b.sixth || 0) - (a.sixth || 0);
         return 0;
       });
 
@@ -265,8 +268,11 @@ app.post("/trigger-season", async (req, res) => {
       const first = entry.first || 0;
       const second = entry.second || 0;
       const third = entry.third || 0;
+      const fourth = entry.fourth || 0;
+      const fifth = entry.fifth || 0;
+      const sixth = entry.sixth || 0;
 
-      return `*#${i + 1}*${spacer}**${entry.username}** – \`${entry.points} pts\`\n${spacer}${spacer}🥇${first} 🥈${second} 🥉${third}`;
+      return `*#${i + 1}*${spacer}**${entry.username}** – \`${entry.points} pts\`\n${spacer}${spacer}🥇${first} 🥈${second} 🥉${third} 4️⃣${fourth} 5️⃣${fifth} 6️⃣${sixth}`;
     });
 
     const embed = {

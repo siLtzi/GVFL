@@ -42,7 +42,7 @@ module.exports = {
       });
     }
 
-    const delta = POINTS_MAP[data.placement];
+    const delta = POINTS_MAP[data.placement] || 0;
 
     // Handle undoing score action
     const userRef = db.collection(`seasons/${data.season}/scores`).doc(data.userId);
@@ -53,15 +53,16 @@ module.exports = {
       ? Math.max((current.points || 0) - delta, 0)
       : (current.points || 0) + delta;
 
-    const field = data.placement === 1 ? 'first' : data.placement === 2 ? 'second' : 'third';
-    const newFieldVal = data.type === 'add'
+    const fieldMap = { 1: 'first', 2: 'second', 3: 'third', 4: 'fourth', 5: 'fifth', 6: 'sixth' };
+    const field = fieldMap[data.placement];
+    const newFieldVal = field ? (data.type === 'add'
       ? Math.max((current[field] || 0) - 1, 0)
-      : (current[field] || 0) + 1;
+      : (current[field] || 0) + 1) : null;
 
     await userRef.set({
       ...current,
       points: newPoints,
-      [field]: newFieldVal
+      ...(field ? { [field]: newFieldVal } : {})
     });
 
     // Handle undoing fantasyLink action

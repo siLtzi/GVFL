@@ -1,4 +1,4 @@
-const pointsMap = { 1: 3, 2: 2, 3: 1 };
+const pointsMap = { 1: 10, 2: 6, 3: 4, 4: 3, 5: 2, 6: 1 };
 
 module.exports = async function awardPlacement(db, {
   userId,
@@ -8,7 +8,7 @@ module.exports = async function awardPlacement(db, {
   addedBy,
   type = "manual"
 }) {
-  if (![1, 2, 3].includes(placement)) {
+  if (placement < 1) {
     throw new Error(`Invalid placement: ${placement}`);
   }
 
@@ -28,7 +28,7 @@ module.exports = async function awardPlacement(db, {
     }
   }
 
-  const points = pointsMap[placement];
+  const points = pointsMap[placement] || 0;
   const userRef = db.collection(`seasons/${season}/scores`).doc(resolvedId);
   const userDoc = await userRef.get();
   const current = userDoc.exists ? userDoc.data() : {};
@@ -42,6 +42,9 @@ module.exports = async function awardPlacement(db, {
     first: placement === 1 ? (current.first || 0) + 1 : (current.first || 0),
     second: placement === 2 ? (current.second || 0) + 1 : (current.second || 0),
     third: placement === 3 ? (current.third || 0) + 1 : (current.third || 0),
+    fourth: placement === 4 ? (current.fourth || 0) + 1 : (current.fourth || 0),
+    fifth: placement === 5 ? (current.fifth || 0) + 1 : (current.fifth || 0),
+    sixth: placement === 6 ? (current.sixth || 0) + 1 : (current.sixth || 0),
   });
 
   await db.collection("logs").add({

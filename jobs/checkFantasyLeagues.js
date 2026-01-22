@@ -45,7 +45,10 @@ const checkFantasyLeagues = async (db) => {
       const placements = await getLeaguePlacements(fantasyId, leagueId);
       const awarded = [];
 
-      for (let i = 0; i < 3; i++) {
+      const pointsMap = { 1: 10, 2: 6, 3: 4, 4: 3, 5: 2, 6: 1 };
+      const medalMap = { 1: "🥇", 2: "🥈", 3: "🥉", 4: "4️⃣", 5: "5️⃣", 6: "6️⃣" };
+
+      for (let i = 0; i < 6; i++) {
         const entry = placements[i];
         if (!entry) continue;
 
@@ -62,13 +65,13 @@ const checkFantasyLeagues = async (db) => {
         awarded.push({
           placement,
           username: entry.username,
-          points: placement === 1 ? 3 : placement === 2 ? 2 : 1,
+          points: pointsMap[placement],
         });
       }
 
       // Format lines
       const lines = awarded.map((p) => {
-        const medal = p.placement === 1 ? "🥇" : p.placement === 2 ? "🥈" : "🥉";
+        const medal = medalMap[p.placement];
         return `${medal} Added ${ordinal(p.placement)} placement to **${p.username}** \`${p.points} pts\``;
       });
 
@@ -93,7 +96,7 @@ const checkFantasyLeagues = async (db) => {
       try {
         const whatsappMsg = `🏁 ${eventName}\n\n` + 
           awarded.map((p) => {
-            const medal = p.placement === 1 ? "🥇" : p.placement === 2 ? "🥈" : "🥉";
+            const medal = medalMap[p.placement];
             return `${medal} Added ${ordinal(p.placement)} to ${p.username} [${p.points} pts]`;
           }).join("\n") + `\n\nSeason: ${season}\nBy: system`;
 

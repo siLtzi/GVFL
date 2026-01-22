@@ -7,10 +7,10 @@ const ALLOWED_USERS = process.env.ALLOWED_USERS.split(',');
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('removepoints')
-    .setDescription('Remove placement points from a user (1st = -3, 2nd = -2, 3rd = -1)')
+    .setDescription('Remove placement points from a user (1st=-10, 2nd=-6, 3rd=-4, 4th=-3, 5th=-2, 6th=-1)')
     .addIntegerOption(option =>
       option.setName('placement')
-        .setDescription('1 = 🥇, 2 = 🥈, 3 = 🥉')
+        .setDescription('1-6 placement')
         .setRequired(true))
     .addUserOption(option =>
       option.setName('user')
@@ -35,15 +35,15 @@ module.exports = {
     const manualName = interaction.options.getString('name');
     const placement = interaction.options.getInteger('placement');
 
-    if (![1, 2, 3].includes(placement)) {
-      return await interaction.reply({ content: 'Placement must be 1, 2, or 3.', ephemeral: true });
+    if (placement < 1 || placement > 6) {
+      return await interaction.reply({ content: 'Placement must be between 1 and 6.', ephemeral: true });
     }
 
     if (!discordUser && !manualName) {
       return await interaction.reply({ content: 'Provide either user or name.', ephemeral: true });
     }
 
-    const points = POINTS_MAP[placement];
+    const points = POINTS_MAP[placement] || 0;
     const userId = discordUser ? discordUser.id : manualName.toLowerCase().replace(/\s+/g, '_');
     const username = discordUser ? discordUser.username : manualName;
 
@@ -68,7 +68,10 @@ module.exports = {
       points: newPoints,
       first: placement === 1 ? Math.max((current.first || 0) - 1, 0) : (current.first || 0),
       second: placement === 2 ? Math.max((current.second || 0) - 1, 0) : (current.second || 0),
-      third: placement === 3 ? Math.max((current.third || 0) - 1, 0) : (current.third || 0)
+      third: placement === 3 ? Math.max((current.third || 0) - 1, 0) : (current.third || 0),
+      fourth: placement === 4 ? Math.max((current.fourth || 0) - 1, 0) : (current.fourth || 0),
+      fifth: placement === 5 ? Math.max((current.fifth || 0) - 1, 0) : (current.fifth || 0),
+      sixth: placement === 6 ? Math.max((current.sixth || 0) - 1, 0) : (current.sixth || 0),
     });
 
     // Log for undo

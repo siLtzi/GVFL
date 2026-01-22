@@ -13,8 +13,9 @@ function ordinal(n) {
 
 /**
  * Points awarded for each placement
+ * 1st=10, 2nd=6, 3rd=4, 4th=3, 5th=2, 6th=1, 7th+=0
  */
-const POINTS_MAP = { 1: 3, 2: 2, 3: 1 };
+const POINTS_MAP = { 1: 10, 2: 6, 3: 4, 4: 3, 5: 2, 6: 1 };
 
 /**
  * Colors for embed based on placement
@@ -23,12 +24,15 @@ const COLOR_MAP = {
   1: 0xFFD700, // Gold
   2: 0xC0C0C0, // Silver
   3: 0xCD7F32, // Bronze
+  4: 0x5865F2, // Blue
+  5: 0x57F287, // Green
+  6: 0xFEE75C, // Yellow
 };
 
 /**
  * Medal emojis for placements
  */
-const MEDAL_MAP = { 1: '🥇', 2: '🥈', 3: '🥉' };
+const MEDAL_MAP = { 1: '🥇', 2: '🥈', 3: '🥉', 4: '4️⃣', 5: '5️⃣', 6: '6️⃣' };
 
 /**
  * Sleep utility
