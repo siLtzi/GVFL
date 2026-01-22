@@ -73,7 +73,7 @@ module.exports = {
         entry.points
       } pts\`\n${spacer}${spacer}🥇${entry.first} 🥈${entry.second} 🥉${
         entry.third
-      } 4️⃣${entry.fourth || 0} 5️⃣${entry.fifth || 0} 6️⃣${entry.sixth || 0}`;
+      }`;
     });
 
     // Fetch season winners

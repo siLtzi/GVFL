@@ -268,11 +268,8 @@ app.post("/trigger-season", async (req, res) => {
       const first = entry.first || 0;
       const second = entry.second || 0;
       const third = entry.third || 0;
-      const fourth = entry.fourth || 0;
-      const fifth = entry.fifth || 0;
-      const sixth = entry.sixth || 0;
 
-      return `*#${i + 1}*${spacer}**${entry.username}** – \`${entry.points} pts\`\n${spacer}${spacer}🥇${first} 🥈${second} 🥉${third} 4️⃣${fourth} 5️⃣${fifth} 6️⃣${sixth}`;
+      return `*#${i + 1}*${spacer}**${entry.username}** – \`${entry.points} pts\`\n${spacer}${spacer}🥇${first} 🥈${second} 🥉${third}`;
     });
 
     const embed = {
