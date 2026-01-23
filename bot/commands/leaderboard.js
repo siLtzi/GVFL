@@ -14,8 +14,15 @@ module.exports = {
 
     const spacer = "\u2003"; // EM space
 
+    const users = {};
+    scoresSnap.forEach((doc) => {
+      const data = doc.data();
+      const id = data.userId || "unknown";
+      users[id] = data;
+    });
+
     // Convert to sorted array
-    const leaderboard = scoresSnap.docs.map((doc) => doc.data()).sort((a, b) => {
+    const leaderboard = Object.values(users).sort((a, b) => {
       if (b.points !== a.points) {
         return b.points - a.points;
       }
