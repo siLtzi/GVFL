@@ -57,6 +57,12 @@ module.exports = {
       username: topUser.username,
     });
 
+    // Mark season as ended in seasons collection
+    await db.collection('seasons').doc(seasonName).set({
+      endedAt: new Date(),
+      active: false
+    }, { merge: true });
+
     // Log the action
     await db.collection('logs').add({
       type: 'endseason',

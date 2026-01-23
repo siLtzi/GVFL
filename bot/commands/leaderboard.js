@@ -6,44 +6,16 @@ module.exports = {
     .setDescription("Show total points across all seasons"),
 
   async execute(interaction, db) {
-    const scoresSnap = await db.collectionGroup("scores").get();
+    const scoresSnap = await db.collection("allTimeScores").get();
 
     if (scoresSnap.empty) {
-      return await interaction.reply("No scores found across any season");
+      return await interaction.reply("No scores found in all-time records");
     }
 
-    // Group by userId
-    const users = {};
     const spacer = "\u2003"; // EM space
 
-    scoresSnap.forEach((doc) => {
-      const data = doc.data();
-      const id = data.userId || "unknown";
-      const name = data.username || "Unknown";
-      if (!users[id]) {
-        users[id] = {
-          username: name,
-          points: 0,
-          first: 0,
-          second: 0,
-          third: 0,
-          fourth: 0,
-          fifth: 0,
-          sixth: 0,
-        };
-      }
-
-      users[id].points += data.points || 0;
-      users[id].first += data.first || 0;
-      users[id].second += data.second || 0;
-      users[id].third += data.third || 0;
-      users[id].fourth += data.fourth || 0;
-      users[id].fifth += data.fifth || 0;
-      users[id].sixth += data.sixth || 0;
-    });
-
     // Convert to sorted array
-    const leaderboard = Object.values(users).sort((a, b) => {
+    const leaderboard = scoresSnap.docs.map((doc) => doc.data()).sort((a, b) => {
       if (b.points !== a.points) {
         return b.points - a.points;
       }

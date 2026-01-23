@@ -74,6 +74,25 @@ module.exports = {
       sixth: placement === 6 ? Math.max((current.sixth || 0) - 1, 0) : (current.sixth || 0),
     });
 
+    // Update All-Time Scores
+    const allTimeRef = db.collection('allTimeScores').doc(userId);
+    const allTimeDoc = await allTimeRef.get();
+    const allTimeData = allTimeDoc.exists ? allTimeDoc.data() : {};
+    const allTimePoints = Math.max((allTimeData.points || 0) - points, 0);
+
+    await allTimeRef.set({
+      userId,
+      username,
+      points: allTimePoints,
+      first: placement === 1 ? Math.max((allTimeData.first || 0) - 1, 0) : (allTimeData.first || 0),
+      second: placement === 2 ? Math.max((allTimeData.second || 0) - 1, 0) : (allTimeData.second || 0),
+      third: placement === 3 ? Math.max((allTimeData.third || 0) - 1, 0) : (allTimeData.third || 0),
+      fourth: placement === 4 ? Math.max((allTimeData.fourth || 0) - 1, 0) : (allTimeData.fourth || 0),
+      fifth: placement === 5 ? Math.max((allTimeData.fifth || 0) - 1, 0) : (allTimeData.fifth || 0),
+      sixth: placement === 6 ? Math.max((allTimeData.sixth || 0) - 1, 0) : (allTimeData.sixth || 0),
+      lastUpdated: new Date()
+    }, { merge: true });
+
     // Log for undo
     await db.collection('logs').add({
       userId,

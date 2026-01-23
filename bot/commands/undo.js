@@ -65,6 +65,26 @@ module.exports = {
       ...(field ? { [field]: newFieldVal } : {})
     });
 
+    // Update All-Time Scores
+    const allTimeRef = db.collection('allTimeScores').doc(data.userId);
+    const allTimeDoc = await allTimeRef.get();
+    const allTimeData = allTimeDoc.exists ? allTimeDoc.data() : {};
+
+    const allTimeNewPoints = data.type === 'add'
+      ? Math.max((allTimeData.points || 0) - delta, 0)
+      : (allTimeData.points || 0) + delta;
+
+    const allTimeNewFieldVal = field ? (data.type === 'add'
+      ? Math.max((allTimeData[field] || 0) - 1, 0)
+      : (allTimeData[field] || 0) + 1) : null;
+
+    await allTimeRef.set({
+      ...allTimeData,
+      points: allTimeNewPoints,
+      ...(field ? { [field]: allTimeNewFieldVal } : {}),
+      lastUpdated: new Date()
+    }, { merge: true });
+
     // Handle undoing fantasyLink action
     if (data.fantasyLink) {
       const fantasyLinkRef = db.collection('fantasyLinks').doc(data.fantasyLink);
