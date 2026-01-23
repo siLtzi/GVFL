@@ -35,24 +35,14 @@ module.exports = {
       if ((b.third || 0) !== (a.third || 0)) {
         return (b.third || 0) - (a.third || 0);
       }
-      if ((b.fourth || 0) !== (a.fourth || 0)) {
-        return (b.fourth || 0) - (a.fourth || 0);
-      }
-      if ((b.fifth || 0) !== (a.fifth || 0)) {
-        return (b.fifth || 0) - (a.fifth || 0);
-      }
-      if ((b.sixth || 0) !== (a.sixth || 0)) {
-        return (b.sixth || 0) - (a.sixth || 0);
-      }
       return 0;
     });
 
     const lines = leaderboard.slice(0, 10).map((entry, index) => {
-      return `*#${index + 1}*${spacer}**${entry.username}** · \`${
+      const displayName = entry.username || entry.userId || "Unknown";
+      return `*#${index + 1}*${spacer}**${displayName}** · \`${
         entry.points
-      } pts\`\n${spacer}${spacer}🥇${entry.first} 🥈${entry.second} 🥉${
-        entry.third
-      }`;
+      } pts\`\n${spacer}${spacer}🥇${entry.first || 0} 🥈${entry.second || 0} 🥉${entry.third || 0}`;
     });
 
     // Fetch season winners
