@@ -17,8 +17,8 @@ module.exports = {
     const users = {};
     scoresSnap.forEach((doc) => {
       const data = doc.data();
-      const id = data.userId || "unknown";
-      users[id] = data;
+      const id = doc.id;
+      users[id] = { ...data, docId: id };
     });
 
     // Convert to sorted array
@@ -39,7 +39,7 @@ module.exports = {
     });
 
     const lines = leaderboard.slice(0, 10).map((entry, index) => {
-      const displayName = entry.username || entry.userId || "Unknown";
+      const displayName = entry.username || entry.docId || "Unknown";
       return `*#${index + 1}*${spacer}**${displayName}** · \`${
         entry.points
       } pts\`\n${spacer}${spacer}🥇${entry.first || 0} 🥈${entry.second || 0} 🥉${entry.third || 0}`;
