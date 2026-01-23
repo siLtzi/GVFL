@@ -49,8 +49,9 @@ module.exports = {
       const gold = entry.first || 0;
       const silver = entry.second || 0;
       const bronze = entry.third || 0;
+      const displayName = entry.username || entry.oddslink || entry.userId || "Unknown";
 
-      return `*#${index + 1}*${spacer}**${entry.username}** – \`${
+      return `*#${index + 1}*${spacer}**${displayName}** – \`${
         entry.points
       } pts\`\n${spacer}${spacer}🥇${gold} 🥈${silver} 🥉${bronze}`;
     });
