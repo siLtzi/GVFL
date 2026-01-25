@@ -73,8 +73,6 @@ module.exports = {
           console.log("🆔 Event ID parsed from eventPageLink:", eventId);
 
           const eventData = await HLTV.getEvent({ id: eventId });
-          console.log("🧠 [HLTV API] Full eventData:", JSON.stringify(eventData, null, 2));
-
 
           if (eventData?.dateStart) {
             const start = DateTime.fromMillis(eventData.dateStart).setZone("Europe/Helsinki");
