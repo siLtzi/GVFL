@@ -138,6 +138,9 @@ const checkFantasyLeagues = async (db) => {
 
       await doc.ref.update({ processed: true });
       console.log(`✅ Marked ${eventName} as processed`);
+
+      // Sync all-time stats after awarding points
+      await syncAllTimeStats(db);
     } catch (err) {
       console.error(`❌ Failed to process ${eventName}:`, err.message);
     }
@@ -145,5 +148,54 @@ const checkFantasyLeagues = async (db) => {
 
   console.log("✅ checkFantasyLeagues finished");
 };
+
+// Rebuild allTimeScores from all season data to ensure consistency
+async function syncAllTimeStats(db) {
+  console.log("🔄 Syncing all-time stats...");
+  
+  try {
+    const snapshot = await db.collectionGroup('scores').get();
+    if (snapshot.empty) return;
+
+    const allTimeMap = new Map();
+
+    snapshot.forEach(doc => {
+      const data = doc.data();
+      const userId = data.userId;
+      if (!userId) return;
+
+      if (!allTimeMap.has(userId)) {
+        allTimeMap.set(userId, {
+          userId,
+          username: data.username || 'Unknown',
+          points: 0,
+          first: 0, second: 0, third: 0, fourth: 0, fifth: 0, sixth: 0
+        });
+      }
+
+      const stats = allTimeMap.get(userId);
+      if (data.username) stats.username = data.username;
+      stats.points += (data.points || 0);
+      stats.first += (data.first || 0);
+      stats.second += (data.second || 0);
+      stats.third += (data.third || 0);
+      stats.fourth += (data.fourth || 0);
+      stats.fifth += (data.fifth || 0);
+      stats.sixth += (data.sixth || 0);
+    });
+
+    // Write updates
+    const batch = db.batch();
+    for (const [userId, stats] of allTimeMap) {
+      const ref = db.collection('allTimeScores').doc(userId);
+      batch.set(ref, { ...stats, lastUpdated: new Date() });
+    }
+    await batch.commit();
+    
+    console.log(`✅ All-time stats synced for ${allTimeMap.size} users`);
+  } catch (err) {
+    console.error("❌ Failed to sync all-time stats:", err.message);
+  }
+}
 
 module.exports = checkFantasyLeagues;

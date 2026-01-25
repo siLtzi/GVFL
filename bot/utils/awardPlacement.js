@@ -48,24 +48,30 @@ module.exports = async function awardPlacement(db, {
   });
 
   // Update All-Time Stats
-  const allTimeRef = db.collection('allTimeScores').doc(resolvedId);
-  const allTimeDoc = await allTimeRef.get();
-  const allTimeData = allTimeDoc.exists ? allTimeDoc.data() : {};
-  
-  const allTimePoints = (allTimeData.points || 0) + points;
-  
-  await allTimeRef.set({
-    userId: resolvedId,
-    username: resolvedName,
-    points: allTimePoints,
-    first: placement === 1 ? (allTimeData.first || 0) + 1 : (allTimeData.first || 0),
-    second: placement === 2 ? (allTimeData.second || 0) + 1 : (allTimeData.second || 0),
-    third: placement === 3 ? (allTimeData.third || 0) + 1 : (allTimeData.third || 0),
-    fourth: placement === 4 ? (allTimeData.fourth || 0) + 1 : (allTimeData.fourth || 0),
-    fifth: placement === 5 ? (allTimeData.fifth || 0) + 1 : (allTimeData.fifth || 0),
-    sixth: placement === 6 ? (allTimeData.sixth || 0) + 1 : (allTimeData.sixth || 0),
-    lastUpdated: new Date()
-  }, { merge: true });
+  try {
+    const allTimeRef = db.collection('allTimeScores').doc(resolvedId);
+    const allTimeDoc = await allTimeRef.get();
+    const allTimeData = allTimeDoc.exists ? allTimeDoc.data() : {};
+    
+    const allTimePoints = (allTimeData.points || 0) + points;
+    
+    await allTimeRef.set({
+      userId: resolvedId,
+      username: resolvedName,
+      points: allTimePoints,
+      first: placement === 1 ? (allTimeData.first || 0) + 1 : (allTimeData.first || 0),
+      second: placement === 2 ? (allTimeData.second || 0) + 1 : (allTimeData.second || 0),
+      third: placement === 3 ? (allTimeData.third || 0) + 1 : (allTimeData.third || 0),
+      fourth: placement === 4 ? (allTimeData.fourth || 0) + 1 : (allTimeData.fourth || 0),
+      fifth: placement === 5 ? (allTimeData.fifth || 0) + 1 : (allTimeData.fifth || 0),
+      sixth: placement === 6 ? (allTimeData.sixth || 0) + 1 : (allTimeData.sixth || 0),
+      lastUpdated: new Date()
+    }, { merge: true });
+    
+    console.log(`📊 All-time updated for ${resolvedName}: ${allTimePoints} total pts`);
+  } catch (err) {
+    console.error(`❌ Failed to update allTimeScores for ${resolvedName}:`, err.message);
+  }
 
   await db.collection("logs").add({
     userId: resolvedId,
