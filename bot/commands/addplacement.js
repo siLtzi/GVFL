@@ -1,6 +1,7 @@
 require('dotenv').config();
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
-const { ordinal, POINTS_MAP, COLOR_MAP, MEDAL_MAP } = require('../utils/helpers');
+const { ordinal, COLOR_MAP, MEDAL_MAP } = require('../utils/helpers');
+const { addToStandings, getManualEventName, POINTS_MAP } = require('../utils/standingsManager');
 
 const ALLOWED_USERS = process.env.ALLOWED_USERS.split(',');
 
@@ -18,7 +19,11 @@ module.exports = {
         .setRequired(false))
     .addStringOption(option =>
       option.setName('name')
-        .setDescription('Manual name')
+        .setDescription('Manual name (use canonical DB name like DeKksu, tapinho, Hexsa)')
+        .setRequired(false))
+    .addStringOption(option =>
+      option.setName('event')
+        .setDescription('Event name (optional - defaults to "Manual Adjustments")')
         .setRequired(false)),
 
   async execute(interaction, db) {
@@ -34,90 +39,59 @@ module.exports = {
     const discordUser = interaction.options.getUser('user');
     const manualName = interaction.options.getString('name');
     const placement = interaction.options.getInteger('placement');
+    const customEvent = interaction.options.getString('event');
 
     if (placement < 1 || placement > 6) {
-      return await interaction.reply({ content: 'Placement must be between 1 and 6 (7th+ awards 0 points).', ephemeral: true });
+      return await interaction.reply({ content: 'Placement must be between 1 and 6.', ephemeral: true });
     }
 
     if (!discordUser && !manualName) {
       return await interaction.reply({ content: 'Provide either user or name.', ephemeral: true });
     }
 
+    // Get the canonical username - this should match your DB names (DeKksu, tapinho, etc.)
+    const username = manualName || discordUser.username;
     const points = POINTS_MAP[placement] || 0;
-    const userId = discordUser ? discordUser.id : manualName.toLowerCase().replace(/\s+/g, '_');
-    const username = discordUser ? discordUser.username : manualName;
 
+    // Get current season
     const settingsRef = db.collection('settings').doc('config');
     const settingsDoc = await settingsRef.get();
-    if (!settingsDoc.exists) return await interaction.reply({ content: 'No active season.', ephemeral: true });
+    if (!settingsDoc.exists) {
+      return await interaction.reply({ content: 'No active season.', ephemeral: true });
+    }
     const season = settingsDoc.data().currentSeason;
 
-    const userRef = db.collection(`seasons/${season}/scores`).doc(userId);
-    const userDoc = await userRef.get();
-    const current = userDoc.exists ? userDoc.data() : {};
+    // Determine event name
+    const eventName = customEvent || getManualEventName(season);
 
-    const newPoints = (current.points || 0) + points;
-
-    await userRef.set({
-      userId,
-      username,
-      points: newPoints,
-      first: placement === 1 ? (current.first || 0) + 1 : (current.first || 0),
-      second: placement === 2 ? (current.second || 0) + 1 : (current.second || 0),
-      third: placement === 3 ? (current.third || 0) + 1 : (current.third || 0),
-      fourth: placement === 4 ? (current.fourth || 0) + 1 : (current.fourth || 0),
-      fifth: placement === 5 ? (current.fifth || 0) + 1 : (current.fifth || 0),
-      sixth: placement === 6 ? (current.sixth || 0) + 1 : (current.sixth || 0),
-    });
-
-    // Update All-Time Scores
-    const allTimeRef = db.collection('allTimeScores').doc(userId);
-    const allTimeDoc = await allTimeRef.get();
-    const allTimeData = allTimeDoc.exists ? allTimeDoc.data() : {};
-    const allTimePoints = (allTimeData.points || 0) + points;
-
-    await allTimeRef.set({
-      userId,
-      username,
-      points: allTimePoints,
-      first: placement === 1 ? (allTimeData.first || 0) + 1 : (allTimeData.first || 0),
-      second: placement === 2 ? (allTimeData.second || 0) + 1 : (allTimeData.second || 0),
-      third: placement === 3 ? (allTimeData.third || 0) + 1 : (allTimeData.third || 0),
-      fourth: placement === 4 ? (allTimeData.fourth || 0) + 1 : (allTimeData.fourth || 0),
-      fifth: placement === 5 ? (allTimeData.fifth || 0) + 1 : (allTimeData.fifth || 0),
-      sixth: placement === 6 ? (allTimeData.sixth || 0) + 1 : (allTimeData.sixth || 0),
-      lastUpdated: new Date(),
-    }, { merge: true });
-
-    // Log for undo
-    await db.collection('logs').add({
-      userId,
-      username,
-      placement,
-      type: 'add',
-      season,
-      by: interaction.user.username,
-      timestamp: new Date()
-    });
-
-    // Get total points across seasons
-    let totalPoints = 0;
     try {
-      const allSeasons = await db.collectionGroup('scores').where('userId', '==', userId).get();
-      allSeasons.forEach(doc => totalPoints += doc.data().points || 0);
-    } catch {
-      totalPoints = newPoints;
+      const result = await addToStandings(db, {
+        eventName,
+        username,
+        placement,
+        teamName: "",
+        totalPoints: 0,
+        season,
+        addedBy: interaction.user.username,
+      });
+
+      const embed = new EmbedBuilder()
+        .setTitle(`${MEDAL_MAP[placement]} Added ${ordinal(placement)} placement to ${result.username}`)
+        .setColor(COLOR_MAP[placement])
+        .setThumbnail("https://i.imgur.com/STR5Ww3.png")
+        .setDescription(
+          `**+${points} points**\n\n` +
+          `Event: ${eventName}\n` +
+          `Season: ${season}`
+        );
+
+      await interaction.reply({ embeds: [embed] });
+    } catch (err) {
+      console.error("❌ Failed to add placement:", err);
+      await interaction.reply({
+        content: `❌ Failed to add placement: ${err.message}`,
+        ephemeral: true,
+      });
     }
-
-    const embed = new EmbedBuilder()
-      .setTitle(`${MEDAL_MAP[placement]} Added ${ordinal(placement)} placement to ${username}`)
-      .setColor(COLOR_MAP[placement])
-      .setThumbnail("https://i.imgur.com/STR5Ww3.png")
-      .setDescription(
-        `Season ${season} points: **${newPoints}**\n\n` +
-        `Total points: **${totalPoints}**\n\n`
-      );
-
-    await interaction.reply({ embeds: [embed] });
   }
 };

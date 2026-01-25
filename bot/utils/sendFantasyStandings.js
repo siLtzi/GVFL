@@ -61,6 +61,7 @@ module.exports = async function sendFantasyStandings(client) {
         {
           placements,
           status,
+          ongoing: !status?.isGameFinished, // Mark as ongoing if not finished
           updatedAt: admin.firestore.FieldValue.serverTimestamp(),
           lastAttemptAt: admin.firestore.FieldValue.serverTimestamp(),
           lastError: admin.firestore.FieldValue.delete(),
@@ -110,6 +111,7 @@ module.exports = async function sendFantasyStandings(client) {
       {
         placements,
         status,
+        ongoing: !status?.isGameFinished, // Mark as ongoing if not finished
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
         lastAttemptAt: admin.firestore.FieldValue.serverTimestamp(),
         lastError: admin.firestore.FieldValue.delete(),

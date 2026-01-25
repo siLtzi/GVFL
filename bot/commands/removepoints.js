@@ -1,25 +1,26 @@
 require('dotenv').config();
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
-const { ordinal, POINTS_MAP, COLOR_MAP, MEDAL_MAP } = require('../utils/helpers');
+const { ordinal, COLOR_MAP, MEDAL_MAP } = require('../utils/helpers');
+const { removeFromStandings, POINTS_MAP } = require('../utils/standingsManager');
 
 const ALLOWED_USERS = process.env.ALLOWED_USERS.split(',');
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('removepoints')
-    .setDescription('Remove placement points from a user (1st=-10, 2nd=-6, 3rd=-4, 4th=-3, 5th=-2, 6th=-1)')
+    .setDescription('Remove placement points from a user')
+    .addStringOption(option =>
+      option.setName('event')
+        .setDescription('Event name to remove from')
+        .setRequired(true))
     .addIntegerOption(option =>
       option.setName('placement')
         .setDescription('1-6 placement')
         .setRequired(true))
-    .addUserOption(option =>
-      option.setName('user')
-        .setDescription('Discord user')
-        .setRequired(false))
     .addStringOption(option =>
       option.setName('name')
-        .setDescription('Manual name')
-        .setRequired(false)),
+        .setDescription('Username (must match exactly as stored)')
+        .setRequired(true)),
 
   async execute(interaction, db) {
     const userIdExecuting = interaction.user.id;
@@ -31,97 +32,51 @@ module.exports = {
       });
     }
 
-    const discordUser = interaction.options.getUser('user');
-    const manualName = interaction.options.getString('name');
+    const eventName = interaction.options.getString('event');
     const placement = interaction.options.getInteger('placement');
+    const username = interaction.options.getString('name');
 
     if (placement < 1 || placement > 6) {
       return await interaction.reply({ content: 'Placement must be between 1 and 6.', ephemeral: true });
     }
 
-    if (!discordUser && !manualName) {
-      return await interaction.reply({ content: 'Provide either user or name.', ephemeral: true });
-    }
-
-    const points = POINTS_MAP[placement] || 0;
-    const userId = discordUser ? discordUser.id : manualName.toLowerCase().replace(/\s+/g, '_');
-    const username = discordUser ? discordUser.username : manualName;
-
+    // Get current season
     const settingsRef = db.collection('settings').doc('config');
     const settingsDoc = await settingsRef.get();
-    if (!settingsDoc.exists) return await interaction.reply({ content: 'No active season.', ephemeral: true });
+    if (!settingsDoc.exists) {
+      return await interaction.reply({ content: 'No active season.', ephemeral: true });
+    }
     const season = settingsDoc.data().currentSeason;
 
-    const userRef = db.collection(`seasons/${season}/scores`).doc(userId);
-    const userDoc = await userRef.get();
+    const points = POINTS_MAP[placement] || 0;
 
-    if (!userDoc.exists) {
-      return await interaction.reply({ content: `${username} has no points in this season.`, ephemeral: true });
-    }
-
-    const current = userDoc.data();
-    const newPoints = Math.max((current.points || 0) - points, 0);
-
-    await userRef.set({
-      userId,
-      username,
-      points: newPoints,
-      first: placement === 1 ? Math.max((current.first || 0) - 1, 0) : (current.first || 0),
-      second: placement === 2 ? Math.max((current.second || 0) - 1, 0) : (current.second || 0),
-      third: placement === 3 ? Math.max((current.third || 0) - 1, 0) : (current.third || 0),
-      fourth: placement === 4 ? Math.max((current.fourth || 0) - 1, 0) : (current.fourth || 0),
-      fifth: placement === 5 ? Math.max((current.fifth || 0) - 1, 0) : (current.fifth || 0),
-      sixth: placement === 6 ? Math.max((current.sixth || 0) - 1, 0) : (current.sixth || 0),
-    });
-
-    // Update All-Time Scores
-    const allTimeRef = db.collection('allTimeScores').doc(userId);
-    const allTimeDoc = await allTimeRef.get();
-    const allTimeData = allTimeDoc.exists ? allTimeDoc.data() : {};
-    const allTimePoints = Math.max((allTimeData.points || 0) - points, 0);
-
-    await allTimeRef.set({
-      userId,
-      username,
-      points: allTimePoints,
-      first: placement === 1 ? Math.max((allTimeData.first || 0) - 1, 0) : (allTimeData.first || 0),
-      second: placement === 2 ? Math.max((allTimeData.second || 0) - 1, 0) : (allTimeData.second || 0),
-      third: placement === 3 ? Math.max((allTimeData.third || 0) - 1, 0) : (allTimeData.third || 0),
-      fourth: placement === 4 ? Math.max((allTimeData.fourth || 0) - 1, 0) : (allTimeData.fourth || 0),
-      fifth: placement === 5 ? Math.max((allTimeData.fifth || 0) - 1, 0) : (allTimeData.fifth || 0),
-      sixth: placement === 6 ? Math.max((allTimeData.sixth || 0) - 1, 0) : (allTimeData.sixth || 0),
-      lastUpdated: new Date()
-    }, { merge: true });
-
-    // Log for undo
-    await db.collection('logs').add({
-      userId,
-      username,
-      placement,
-      type: 'remove',
-      season,
-      by: interaction.user.username,
-      timestamp: new Date()
-    });
-
-    // Get total points across seasons
-    let totalPoints = 0;
     try {
-      const allSeasons = await db.collectionGroup('scores').where('userId', '==', userId).get();
-      allSeasons.forEach(doc => totalPoints += doc.data().points || 0);
-    } catch {
-      totalPoints = newPoints;
+      // Remove from standings (SOURCE OF TRUTH)
+      await removeFromStandings(db, {
+        eventName,
+        username,
+        placement,
+        season,
+        removedBy: interaction.user.username,
+      });
+
+      const embed = new EmbedBuilder()
+        .setTitle(`❌ Removed ${ordinal(placement)} placement from ${username}`)
+        .setColor(0xff6b6b)
+        .setThumbnail("https://i.imgur.com/STR5Ww3.png")
+        .setDescription(
+          `**-${points} points**\n\n` +
+          `Event: ${eventName}\n` +
+          `Season: ${season}`
+        );
+
+      await interaction.reply({ embeds: [embed] });
+    } catch (err) {
+      console.error("❌ Failed to remove placement:", err);
+      await interaction.reply({
+        content: `❌ Failed to remove placement: ${err.message}`,
+        ephemeral: true,
+      });
     }
-
-    const embed = new EmbedBuilder()
-      .setTitle(`${MEDAL_MAP[placement]} Removed ${ordinal(placement)} placement from ${username}`)
-      .setColor(COLOR_MAP[placement])
-      .setThumbnail("https://i.imgur.com/STR5Ww3.png")
-      .setDescription(
-        `Total points: **${totalPoints}**\n\n` +
-        `Season ${season} points: **${newPoints}**`
-      );
-
-    await interaction.reply({ embeds: [embed] });
   }
 };

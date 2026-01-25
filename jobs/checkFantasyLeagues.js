@@ -1,5 +1,4 @@
 const { getFantasyLeagueStatus, getLeaguePlacements } = require("./hltvApi");
-const awardPlacement = require("../bot/utils/awardPlacement");
 const { ordinal } = require("../bot/utils/helpers");
 const { EmbedBuilder } = require("discord.js");
 const fetch = (...args) => import("node-fetch").then(({ default: fetch }) => fetch(...args));
@@ -21,8 +20,34 @@ async function fetchWithRetry(url, options, maxRetries = 3) {
   }
 }
 
+const pointsMap = { 1: 10, 2: 6, 3: 4, 4: 3, 5: 2, 6: 1 };
+
+/**
+ * Load users collection and build a lookup map: hltvName -> preferredName
+ */
+async function loadUserMap(db) {
+  const usersSnap = await db.collection("users").get();
+  const map = {};
+  usersSnap.forEach(doc => {
+    const data = doc.data();
+    if (data.hltvName) {
+      map[data.hltvName.toLowerCase()] = data.preferredName;
+    }
+  });
+  return map;
+}
+
 const checkFantasyLeagues = async (db) => {
   console.log("🚀 checkFantasyLeagues started");
+
+  // Load user mapping (hltvName -> preferredName)
+  let userMap = {};
+  try {
+    userMap = await loadUserMap(db);
+    console.log(`📋 Loaded ${Object.keys(userMap).length} user mappings`);
+  } catch (err) {
+    console.error("❌ Failed to load user map:", err);
+  }
 
   let snapshot;
   try {
@@ -58,38 +83,67 @@ const checkFantasyLeagues = async (db) => {
         continue;
       }
 
-      console.log(`🏁 ${eventName} finished — awarding points!`);
+      console.log(`🏁 ${eventName} finished — saving results!`);
       const placements = await getLeaguePlacements(fantasyId, leagueId);
-      const awarded = [];
 
-      const pointsMap = { 1: 10, 2: 6, 3: 4, 4: 3, 5: 2, 6: 1 };
+      // Resolve HLTV names to preferred names
+      const resolvedPlacements = placements.map((p, i) => {
+        const hltvLower = p.username.toLowerCase();
+        const preferredName = userMap[hltvLower] || p.username; // fallback to HLTV name if not found
+        return {
+          placement: i + 1,
+          username: preferredName,
+          hltvName: p.username, // keep original for reference
+          teamName: p.teamName,
+          totalPoints: p.totalPoints,
+        };
+      });
+
+      // Build top 6 for notifications
       const medalMap = { 1: "🥇", 2: "🥈", 3: "🥉", 4: "4️⃣", 5: "5️⃣", 6: "6️⃣" };
+      const top6 = resolvedPlacements.slice(0, 6).map((p) => ({
+        ...p,
+        points: pointsMap[p.placement] || 0,
+      }));
 
-      for (let i = 0; i < 6; i++) {
-        const entry = placements[i];
-        if (!entry) continue;
+      // ✅ Update standings (SOURCE OF TRUTH)
+      // The website's sync-scores.ts reads this and updates allTimeScores + season scores
+      const standingsRef = db.collection("standings").doc(eventName);
+      await standingsRef.set({
+        eventName,
+        ongoing: false,
+        placements: resolvedPlacements.map((p) => ({
+          placement: p.placement,
+          username: p.username,
+          hltvName: p.hltvName,
+          teamName: p.teamName,
+          totalPoints: p.totalPoints,
+        })),
+        processedAt: new Date(),
+        season,
+      }, { merge: true });
 
-        const placement = i + 1;
-        await awardPlacement(db, {
-          userId: entry.username.toLowerCase().replace(/\s+/g, "_"),
-          username: entry.username,
-          placement,
-          season,
-          addedBy: "system",
+      console.log(`✅ Standings updated for ${eventName}`);
+
+      // Log to logs collection
+      for (const p of top6) {
+        await db.collection("logs").add({
+          userId: p.username.toLowerCase().replace(/\s+/g, "_"),
+          username: p.username,
+          placement: p.placement,
+          points: p.points,
           type: "auto",
-        });
-
-        awarded.push({
-          placement,
-          username: entry.username,
-          points: pointsMap[placement],
+          season,
+          by: "system",
+          eventName,
+          timestamp: new Date(),
         });
       }
 
-      // Format lines
-      const lines = awarded.map((p) => {
+      // Format lines for Discord embed
+      const lines = top6.map((p) => {
         const medal = medalMap[p.placement];
-        return `${medal} Added ${ordinal(p.placement)} placement to **${p.username}** \`${p.points} pts\``;
+        return `${medal} **${p.username}** \`${p.points} pts\``;
       });
 
       const embed = new EmbedBuilder()
@@ -112,10 +166,10 @@ const checkFantasyLeagues = async (db) => {
       // WhatsApp
       try {
         const whatsappMsg = `🏁 ${eventName}\n\n` + 
-          awarded.map((p) => {
+          top6.map((p) => {
             const medal = medalMap[p.placement];
-            return `${medal} Added ${ordinal(p.placement)} to ${p.username} [${p.points} pts]`;
-          }).join("\n") + `\n\nSeason: ${season}\nBy: system`;
+            return `${medal} ${ordinal(p.placement)} — ${p.username} [${p.points} pts]`;
+          }).join("\n") + `\n\nSeason: ${season}`;
 
         await fetchWithRetry("http://localhost:3001/send-whatsapp", {
           method: "POST",
@@ -138,9 +192,6 @@ const checkFantasyLeagues = async (db) => {
 
       await doc.ref.update({ processed: true });
       console.log(`✅ Marked ${eventName} as processed`);
-
-      // Sync all-time stats after awarding points
-      await syncAllTimeStats(db);
     } catch (err) {
       console.error(`❌ Failed to process ${eventName}:`, err.message);
     }
@@ -148,54 +199,5 @@ const checkFantasyLeagues = async (db) => {
 
   console.log("✅ checkFantasyLeagues finished");
 };
-
-// Rebuild allTimeScores from all season data to ensure consistency
-async function syncAllTimeStats(db) {
-  console.log("🔄 Syncing all-time stats...");
-  
-  try {
-    const snapshot = await db.collectionGroup('scores').get();
-    if (snapshot.empty) return;
-
-    const allTimeMap = new Map();
-
-    snapshot.forEach(doc => {
-      const data = doc.data();
-      const userId = data.userId;
-      if (!userId) return;
-
-      if (!allTimeMap.has(userId)) {
-        allTimeMap.set(userId, {
-          userId,
-          username: data.username || 'Unknown',
-          points: 0,
-          first: 0, second: 0, third: 0, fourth: 0, fifth: 0, sixth: 0
-        });
-      }
-
-      const stats = allTimeMap.get(userId);
-      if (data.username) stats.username = data.username;
-      stats.points += (data.points || 0);
-      stats.first += (data.first || 0);
-      stats.second += (data.second || 0);
-      stats.third += (data.third || 0);
-      stats.fourth += (data.fourth || 0);
-      stats.fifth += (data.fifth || 0);
-      stats.sixth += (data.sixth || 0);
-    });
-
-    // Write updates
-    const batch = db.batch();
-    for (const [userId, stats] of allTimeMap) {
-      const ref = db.collection('allTimeScores').doc(userId);
-      batch.set(ref, { ...stats, lastUpdated: new Date() });
-    }
-    await batch.commit();
-    
-    console.log(`✅ All-time stats synced for ${allTimeMap.size} users`);
-  } catch (err) {
-    console.error("❌ Failed to sync all-time stats:", err.message);
-  }
-}
 
 module.exports = checkFantasyLeagues;
