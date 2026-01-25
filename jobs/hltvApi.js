@@ -80,7 +80,9 @@ async function fetchJsonWithFallback(url, { ttlMs } = {}) {
   }
 
   let lastError;
-  for (let attempt = 0; attempt < 2; attempt += 1) {
+  const maxAttempts = 4; // Increased from 2
+  
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     try {
       const cookieHeader = loadCookieHeader();
       const headers = cookieHeader
@@ -104,7 +106,17 @@ async function fetchJsonWithFallback(url, { ttlMs } = {}) {
       throw new Error(`Failed to fetch: ${res.status} ${res.statusText}`);
     } catch (err) {
       lastError = err;
-      await delay(1000 + Math.random() * 2000);
+      
+      // For DNS errors (EAI_AGAIN), use longer exponential backoff
+      const isDnsError = err?.code === 'EAI_AGAIN' || err?.message?.includes('EAI_AGAIN');
+      const baseDelay = isDnsError ? 3000 : 1000;
+      const backoffDelay = baseDelay * Math.pow(2, attempt) + Math.random() * 2000;
+      
+      if (isDnsError) {
+        console.warn(`DNS resolution failed (attempt ${attempt + 1}/${maxAttempts}), retrying in ${Math.round(backoffDelay)}ms...`);
+      }
+      
+      await delay(backoffDelay);
     }
   }
 

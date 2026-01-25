@@ -33,13 +33,27 @@ async function safeSendMessage(client, to, text, retries = 6) {
   for (let i = 0; i < retries; i++) {
     try {
       if (!ready) throw new Error("Not ready yet");
+      
+      // Check if client page is still valid
+      if (!client?.pupPage || client.pupPage.isClosed()) {
+        throw new Error("Browser page is closed or detached");
+      }
+      
       await sleep(150); // small settle delay
       await client.sendMessage(to, text);
       return;
     } catch (e) {
+      const errorMsg = e?.message || String(e);
+      
+      // If frame is detached or page closed, don't retry - wait for reconnect
+      if (errorMsg.includes("detached") || errorMsg.includes("closed") || errorMsg.includes("Target closed")) {
+        console.error("❌ Browser frame/page is detached. Waiting for reconnect...");
+        throw new Error("Client needs reconnection - frame detached");
+      }
+      
       const delay = Math.min(500 * (i + 1), 3000);
       console.warn(
-        `⚠️ sendMessage blocked (attempt ${i + 1}/${retries}): ${e?.message || e}. Retrying in ${delay}ms`
+        `⚠️ sendMessage blocked (attempt ${i + 1}/${retries}): ${errorMsg}. Retrying in ${delay}ms`
       );
       await sleep(delay);
     }
@@ -79,16 +93,57 @@ waClient.on("ready", () => {
   console.log("✅ WhatsApp ready");
   console.log("📂 Tokens directory:", TOKENS_DIR);
 });
-waClient.on("disconnected", (reason) => {
+waClient.on("disconnected", async (reason) => {
   ready = false;
   console.warn("⚠️ Disconnected:", reason);
-  // Auto-reconnect after 5 seconds
-  setTimeout(() => {
-    console.log("🔄 Attempting to reconnect...");
-    waClient.initialize().catch((err) =>
-      console.error("❌ Reconnection failed:", err)
-    );
-  }, 5000);
+  
+  // Destroy the old client to clean up any stale browser frames
+  try {
+    await waClient.destroy();
+    console.log("🧹 Old client destroyed");
+  } catch (e) {
+    console.warn("⚠️ Could not destroy old client:", e?.message);
+  }
+
+  // Recreate and reinitialize after a delay
+  setTimeout(async () => {
+    console.log("🔄 Attempting to reconnect with fresh client...");
+    try {
+      waClient = new Client({
+        authStrategy: new LocalAuth({
+          clientId: "gvfl-bot",
+          dataPath: TOKENS_DIR,
+        }),
+        puppeteer: {
+          headless: true,
+          executablePath: exePath,
+          args:
+            process.platform === "linux"
+              ? ["--no-sandbox", "--disable-dev-shm-usage"]
+              : [],
+        },
+      });
+
+      // Re-attach event handlers
+      waClient.on("qr", (qr) => {
+        console.log("📲 Scan this QR with your WhatsApp app:");
+        qrcode.generate(qr, { small: true });
+      });
+      waClient.on("authenticated", () => console.log("🔐 Authenticated"));
+      waClient.on("auth_failure", (m) => console.error("❌ Auth failure:", m));
+      waClient.on("ready", () => {
+        ready = true;
+        console.log("✅ WhatsApp ready (reconnected)");
+      });
+      waClient.on("disconnected", arguments.callee); // Recursively attach this handler
+
+      await waClient.initialize();
+    } catch (err) {
+      console.error("❌ Reconnection failed:", err?.message || err);
+      // Retry again after 30 seconds
+      setTimeout(() => waClient.initialize().catch(console.error), 30000);
+    }
+  }, 10000); // Wait 10s before reconnecting
 });
 
 waClient.initialize().catch((err) =>
