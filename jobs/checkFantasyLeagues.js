@@ -4,6 +4,23 @@ const { ordinal } = require("../bot/utils/helpers");
 const { EmbedBuilder } = require("discord.js");
 const fetch = (...args) => import("node-fetch").then(({ default: fetch }) => fetch(...args));
 
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// Retry helper for middleware calls (handles ECONNREFUSED during restarts)
+async function fetchWithRetry(url, options, maxRetries = 3) {
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      const res = await fetch(url, options);
+      return res;
+    } catch (err) {
+      const isRetryable = err.code === 'ECONNREFUSED' || err.message?.includes('ECONNREFUSED');
+      if (!isRetryable || i === maxRetries - 1) throw err;
+      console.warn(`⚠️ Middleware unavailable (attempt ${i + 1}/${maxRetries}), retrying in ${(i + 1) * 2}s...`);
+      await sleep((i + 1) * 2000);
+    }
+  }
+}
+
 const checkFantasyLeagues = async (db) => {
   console.log("🚀 checkFantasyLeagues started");
 
@@ -100,7 +117,7 @@ const checkFantasyLeagues = async (db) => {
             return `${medal} Added ${ordinal(p.placement)} to ${p.username} [${p.points} pts]`;
           }).join("\n") + `\n\nSeason: ${season}\nBy: system`;
 
-        await fetch("http://localhost:3001/send-whatsapp", {
+        await fetchWithRetry("http://localhost:3001/send-whatsapp", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ message: whatsappMsg }),
@@ -113,7 +130,7 @@ const checkFantasyLeagues = async (db) => {
 
       // Trigger /season logic (POST to server.js)
       try {
-        await fetch("http://localhost:3001/trigger-season", { method: "POST" });
+        await fetchWithRetry("http://localhost:3001/trigger-season", { method: "POST" });
         console.log("✅ Season leaderboard posted");
       } catch (err) {
         console.error("❌ Failed to call /season webhook:", err.message);

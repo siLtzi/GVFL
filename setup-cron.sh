@@ -13,7 +13,7 @@ NODE_PATH=$(which node)
 crontab -l 2>/dev/null | grep -v 'runFantasyCheck.js\|runPostStandings.js' > tempcron
 
 echo "5 * * * * $NODE_PATH $PROJECT_DIR/jobs/runFantasyCheck.js >> $PROJECT_DIR/logs/fantasyCheck.log 2>&1" >> tempcron
-echo "015 * * * * $NODE_PATH $PROJECT_DIR/jobs/runPostStandings.js >> $PROJECT_DIR/logs/postStandings.log 2>&1" >> tempcron
+echo "15 * * * * $NODE_PATH $PROJECT_DIR/jobs/runPostStandings.js >> $PROJECT_DIR/logs/postStandings.log 2>&1" >> tempcron
 
 
 crontab tempcron
