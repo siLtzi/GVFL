@@ -14,6 +14,19 @@ module.exports = {
 
     const spacer = "\u2003"; // EM space
 
+    // Load users for preferred names - map all possible names to preferredName
+    const usersSnap = await db.collection("users").get();
+    const userMap = {};
+    usersSnap.forEach(doc => {
+      const data = doc.data();
+      const preferred = data.preferredName || doc.id;
+      // Map all possible name variations to the preferred name
+      if (data.hltvName) userMap[data.hltvName.toLowerCase()] = preferred;
+      if (data.discordName) userMap[data.discordName.toLowerCase()] = preferred;
+      userMap[doc.id.toLowerCase()] = preferred;
+      userMap[preferred.toLowerCase()] = preferred;
+    });
+
     const users = {};
     scoresSnap.forEach((doc) => {
       const data = doc.data();
@@ -39,7 +52,8 @@ module.exports = {
     });
 
     const lines = leaderboard.slice(0, 10).map((entry, index) => {
-      const displayName = entry.username || entry.docId || "Unknown";
+      const rawName = entry.username || entry.docId || "Unknown";
+      const displayName = userMap[rawName.toLowerCase()] || rawName;
       return `*#${index + 1}*${spacer}**${displayName}** · \`${
         entry.points
       } pts\`\n${spacer}${spacer}🥇${entry.first || 0} 🥈${entry.second || 0} 🥉${entry.third || 0}`;
@@ -51,14 +65,14 @@ module.exports = {
 
     winnersSnap.forEach((doc) => {
       const data = doc.data();
-      const id = data.userId || "unknown";
-      const name = data.username || "Unknown";
+      const rawName = data.username || data.userId || "Unknown";
+      const displayName = userMap[rawName.toLowerCase()] || rawName;
 
-      if (!winCounts[id]) {
-        winCounts[id] = { username: name, wins: 0 };
+      if (!winCounts[displayName]) {
+        winCounts[displayName] = { username: displayName, wins: 0 };
       }
 
-      winCounts[id].wins += 1;
+      winCounts[displayName].wins += 1;
     });
 
     // Format winner summary

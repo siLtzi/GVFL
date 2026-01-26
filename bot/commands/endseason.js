@@ -34,13 +34,27 @@ module.exports = {
       });
     }
 
+    // Load users for preferred names
+    const usersSnap = await db.collection('users').get();
+    const userMap = {};
+    usersSnap.forEach(doc => {
+      const data = doc.data();
+      const preferred = data.preferredName || doc.id;
+      if (data.hltvName) userMap[data.hltvName.toLowerCase()] = preferred;
+      if (data.discordName) userMap[data.discordName.toLowerCase()] = preferred;
+      userMap[doc.id.toLowerCase()] = preferred;
+      userMap[preferred.toLowerCase()] = preferred;
+    });
+
     const standings = [];
 
     scoresSnap.forEach(doc => {
       const data = doc.data();
+      const rawName = data.username || doc.id || 'Unknown';
+      const displayName = userMap[rawName.toLowerCase()] || rawName;
       standings.push({
         userId: data.userId || 'unknown',
-        username: data.username || 'Unknown',
+        username: displayName,
         points: data.points || 0,
         first: data.first || 0,
         second: data.second || 0,

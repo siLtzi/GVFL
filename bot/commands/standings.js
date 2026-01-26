@@ -18,6 +18,18 @@ module.exports = {
         return await interaction.editReply('📭 No active fantasy leagues at the moment.');
       }
 
+      // Load users for preferred names
+      const usersSnap = await db.collection('users').get();
+      const userMap = {};
+      usersSnap.forEach(doc => {
+        const data = doc.data();
+        const preferred = data.preferredName || doc.id;
+        if (data.hltvName) userMap[data.hltvName.toLowerCase()] = preferred;
+        if (data.discordName) userMap[data.discordName.toLowerCase()] = preferred;
+        userMap[doc.id.toLowerCase()] = preferred;
+        userMap[preferred.toLowerCase()] = preferred;
+      });
+
       const embeds = [];
 
       for (const doc of activeLeagues) {
@@ -44,8 +56,10 @@ module.exports = {
 
               const gvflPoints = pointsMap[placement] || 0;
               const pointsInfo = placement <= 6 ? ` → \`+${gvflPoints} GVFL\`` : '';
+              const rawName = p.username || 'Unknown';
+              const displayName = userMap[rawName.toLowerCase()] || rawName;
 
-              return `${medal}${spacer}**${p.username}** • \`${p.totalPoints} pts\`${pointsInfo}`;
+              return `${medal}${spacer}**${displayName}** • \`${p.totalPoints} pts\`${pointsInfo}`;
             })
           : ['⚠️ No cached standings yet.'];
 

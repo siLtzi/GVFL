@@ -18,6 +18,20 @@ module.exports = {
 
     const season = settingsSnap.data().currentSeason;
     const spacer = "\u2003"; // EM space (wide space like tab)
+
+    // Load users for preferred names - map all possible names to preferredName
+    const usersSnap = await db.collection("users").get();
+    const userMap = {};
+    usersSnap.forEach(doc => {
+      const data = doc.data();
+      const preferred = data.preferredName || doc.id;
+      // Map all possible name variations to the preferred name
+      if (data.hltvName) userMap[data.hltvName.toLowerCase()] = preferred;
+      if (data.discordName) userMap[data.discordName.toLowerCase()] = preferred;
+      userMap[doc.id.toLowerCase()] = preferred;
+      userMap[preferred.toLowerCase()] = preferred;
+    });
+
     const scoresRef = db.collection(`seasons/${season}/scores`);
     const scoresSnap = await scoresRef.get();
 
@@ -49,7 +63,8 @@ module.exports = {
       const gold = entry.first || 0;
       const silver = entry.second || 0;
       const bronze = entry.third || 0;
-      const displayName = entry.username || entry.oddslink || entry.userId || "Unknown";
+      const rawName = entry.username || entry.userId || "Unknown";
+      const displayName = userMap[rawName.toLowerCase()] || rawName;
 
       return `*#${index + 1}*${spacer}**${displayName}** – \`${
         entry.points
