@@ -72,10 +72,7 @@ waClient = new Client({
   puppeteer: {
     headless: true,
     executablePath: exePath, // ✅ cross-platform chromium path
-    args:
-      process.platform === "linux"
-        ? ["--no-sandbox", "--disable-dev-shm-usage"]
-        : [],
+    args: ["--no-sandbox", "--disable-dev-shm-usage"], // Add sandbox args for Windows
   },
 });
 
@@ -117,10 +114,7 @@ waClient.on("disconnected", async (reason) => {
         puppeteer: {
           headless: true,
           executablePath: exePath,
-          args:
-            process.platform === "linux"
-              ? ["--no-sandbox", "--disable-dev-shm-usage"]
-              : [],
+          args: ["--no-sandbox", "--disable-dev-shm-usage"], // Add sandbox args for Windows
         },
       });
 
