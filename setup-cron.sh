@@ -12,8 +12,14 @@ NODE_PATH=$(which node)
 # Write crontab entries safely (overwrite any old ones from this script)
 crontab -l 2>/dev/null | grep -v 'runFantasyCheck.js\|runPostStandings.js' > tempcron
 
-echo "5 * * * * $NODE_PATH $PROJECT_DIR/jobs/runFantasyCheck.js >> $PROJECT_DIR/logs/fantasyCheck.log 2>&1" >> tempcron
-echo "15 * * * * $NODE_PATH $PROJECT_DIR/jobs/runPostStandings.js >> $PROJECT_DIR/logs/postStandings.log 2>&1" >> tempcron
+# Create logs directory if it doesn't exist
+mkdir -p $PROJECT_DIR/logs
+
+# Run fantasy check every hour at :05
+echo "5 * * * * cd $PROJECT_DIR && $NODE_PATH $PROJECT_DIR/jobs/runFantasyCheck.js >> $PROJECT_DIR/logs/fantasyCheck.log 2>&1" >> tempcron
+
+# Post standings every hour at :15
+echo "15 * * * * cd $PROJECT_DIR && $NODE_PATH $PROJECT_DIR/jobs/runPostStandings.js >> $PROJECT_DIR/logs/postStandings.log 2>&1" >> tempcron
 
 
 crontab tempcron

@@ -1,16 +1,6 @@
-const fetch = (...args) => import('node-fetch').then(({ default: fetch }) => fetch(...args));
+const { execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
-
-const BASE_HEADERS = {
-  'User-Agent':
-    'curl/8.12.1',
-  'Accept': 'application/json, text/plain, */*',
-  'Accept-Language': 'en-US,en;q=0.9',
-  'Referer': 'https://www.hltv.org/',
-  'Origin': 'https://www.hltv.org',
-  'Connection': 'keep-alive',
-};
 
 const cookiesPath = path.join(__dirname, 'cookies.json');
 const FETCHER_BASE = process.env.HLTV_FETCHER_URL
@@ -64,59 +54,76 @@ function loadCookieHeader() {
   }
 }
 
+/**
+ * Fetch JSON using curl (bypasses Cloudflare better than node-fetch)
+ */
+function fetchWithCurl(url) {
+  const cookieHeader = loadCookieHeader();
+  
+  // Build curl command
+  const curlArgs = [
+    'curl',
+    '-s', // silent
+    '-S', // show errors
+    '-L', // follow redirects
+    '--max-time', '30',
+    '-H', '"Accept: application/json"',
+    '-H', '"User-Agent: curl/8.12.1"',
+  ];
+  
+  if (cookieHeader) {
+    // Escape quotes in cookie header
+    const escapedCookie = cookieHeader.replace(/"/g, '\\"');
+    curlArgs.push('-H', `"Cookie: ${escapedCookie}"`);
+  }
+  
+  curlArgs.push(`"${url}"`);
+  
+  const command = curlArgs.join(' ');
+  
+  try {
+    const output = execSync(command, { 
+      encoding: 'utf8',
+      timeout: 35000,
+      maxBuffer: 10 * 1024 * 1024, // 10MB
+    });
+    
+    return JSON.parse(output);
+  } catch (err) {
+    if (err.stdout) {
+      // Check if stdout contains valid JSON despite error
+      try {
+        return JSON.parse(err.stdout);
+      } catch (parseErr) {
+        // Not valid JSON
+      }
+    }
+    throw new Error(`Curl failed: ${err.message}`);
+  }
+}
+
 async function fetchJsonWithFallback(url, { ttlMs } = {}) {
   const cached = getCached(url);
   if (cached) return cached;
 
-  if (FETCHER_BASE) {
-    const fetcherUrl = `${FETCHER_BASE}/raw?url=${encodeURIComponent(url)}`;
-    const res = await fetch(fetcherUrl, { headers: { Accept: 'application/json' } });
-    if (!res.ok) {
-      throw new Error(`Fetcher failed: ${res.status} ${res.statusText}`);
-    }
-    const json = await res.json();
-    setCached(url, json, ttlMs);
-    return json;
-  }
-
   let lastError;
-  const maxAttempts = 4; // Increased from 2
+  const maxAttempts = 3;
   
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     try {
-      const cookieHeader = loadCookieHeader();
-      const headers = cookieHeader
-        ? { ...BASE_HEADERS, Cookie: cookieHeader }
-        : { ...BASE_HEADERS };
-
-      const res = await fetch(url, { headers });
-
-      if (res.ok) {
-        const json = await res.json();
-        setCached(url, json, ttlMs);
-        return json;
-      }
-
-      const text = await res.text();
-      if (res.status === 403 || isCloudflareBlock(text)) {
-        lastError = new Error(`Access denied (403/Cloudflare) - ${url}`);
-        break;
-      }
-
-      throw new Error(`Failed to fetch: ${res.status} ${res.statusText}`);
+      console.log(`📡 Fetching with curl: ${url} (attempt ${attempt + 1})`);
+      const json = fetchWithCurl(url);
+      setCached(url, json, ttlMs);
+      return json;
     } catch (err) {
       lastError = err;
+      console.warn(`⚠️ Curl attempt ${attempt + 1} failed: ${err.message}`);
       
-      // For DNS errors (EAI_AGAIN), use longer exponential backoff
-      const isDnsError = err?.code === 'EAI_AGAIN' || err?.message?.includes('EAI_AGAIN');
-      const baseDelay = isDnsError ? 3000 : 1000;
-      const backoffDelay = baseDelay * Math.pow(2, attempt) + Math.random() * 2000;
-      
-      if (isDnsError) {
-        console.warn(`DNS resolution failed (attempt ${attempt + 1}/${maxAttempts}), retrying in ${Math.round(backoffDelay)}ms...`);
+      if (err.message.includes('Access denied') || err.message.includes('403')) {
+        break; // Don't retry on explicit blocks
       }
       
-      await delay(backoffDelay);
+      await delay(1000 * (attempt + 1)); // Simple backoff
     }
   }
 
