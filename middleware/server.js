@@ -359,6 +359,20 @@ app.get("/wa-debug", async (_req, res) => {
   });
 });
 
+// List WhatsApp groups for troubleshooting
+app.get("/wa-groups", async (_req, res) => {
+  try {
+    const chats = await waClient.getChats();
+    const groups = chats
+      .filter((c) => c.isGroup)
+      .map((c) => ({ id: c.id?._serialized, name: c.name }))
+      .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+    res.json({ count: groups.length, groups });
+  } catch (err) {
+    res.status(500).send(err?.message || String(err));
+  }
+});
+
 // Discord ➜ WhatsApp
 app.post("/send-whatsapp", async (req, res) => {
   if (!waClient) {
