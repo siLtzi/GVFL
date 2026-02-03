@@ -18,7 +18,7 @@
     "node-fetch": "^3.3.2",
     "puppeteer": "^24.19.0",
     "qrcode-terminal": "^0.12.0",
-    "whatsapp-web.js": "github:pedroslopez/whatsapp-web.js#main"
+    "whatsapp-web.js": "github:olob0/whatsapp-web.js#fix/setPushname"
   },
   "devDependencies": {
     "@types/got": "^9.6.12"
