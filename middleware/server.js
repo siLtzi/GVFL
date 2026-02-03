@@ -242,6 +242,10 @@ waClient.initialize().catch((err) =>
 /* ---- inbound messages from WhatsApp (ported from Venom version) ---- */
 waClient.on("message", async (message) => {
   try {
+    if (message.isGroup && message.from !== process.env.WHATSAPP_GROUP_ID) {
+      console.log("ℹ️ Incoming group message from:", message.from, "(not configured group)");
+      return;
+    }
     if (message.from !== process.env.WHATSAPP_GROUP_ID) return;
     if (!ready) {
       console.warn("↪︎ Message ignored: session not ready yet");
@@ -441,15 +445,6 @@ app.post("/send-whatsapp", async (req, res) => {
       console.error("❌ Invalid WhatsApp target (missing @):", target);
       return res.status(400).send(
         "Invalid WhatsApp target. Must be a full chat id like 12345@g.us or 1234567890@c.us"
-      );
-    }
-
-    try {
-      await waClient.getChatById(target);
-    } catch (e) {
-      console.error("❌ Invalid WhatsApp target:", target, e?.message || e);
-      return res.status(404).send(
-        `Invalid WhatsApp target: ${target}. Ensure WHATSAPP_GROUP_ID is correct.`
       );
     }
 
