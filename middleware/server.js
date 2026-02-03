@@ -101,15 +101,37 @@ waClient.on("qr", (qr) => {
   qrcode.generate(qr, { small: true }); // terminal-friendly QR only
 });
 
-waClient.on("authenticated", () => console.log("🔐 Authenticated - session saved"));
-waClient.on("auth_failure", (m) => console.error("❌ Auth failure:", m));
+// Workaround for WhatsApp A/B testing bug where "ready" event never fires
+let authTimeout = null;
+waClient.on("authenticated", () => {
+  console.log("🔐 Authenticated - session saved");
+  
+  // If ready doesn't fire in 30 seconds, assume we're ready anyway
+  if (authTimeout) clearTimeout(authTimeout);
+  authTimeout = setTimeout(() => {
+    if (!ready) {
+      console.log("⚠️  Ready event didn't fire (WhatsApp A/B bug), forcing ready state...");
+      ready = true;
+      console.log("✅ WhatsApp ready (forced after auth timeout)");
+      console.log("👤 Logged in as:", waClient.info?.pushname || waClient.info?.wid?.user || "unknown");
+    }
+  }, 30000);
+});
+
+waClient.on("auth_failure", (m) => {
+  if (authTimeout) clearTimeout(authTimeout);
+  console.error("❌ Auth failure:", m);
+});
+
 waClient.on("ready", () => {
+  if (authTimeout) clearTimeout(authTimeout);
   ready = true;
   console.log("✅ WhatsApp ready and connected!");
   console.log("📂 Session stored in:", TOKENS_DIR);
   console.log("👤 Logged in as:", waClient.info?.pushname || waClient.info?.wid?.user || "unknown");
 });
 waClient.on("disconnected", async (reason) => {
+  if (authTimeout) clearTimeout(authTimeout);
   ready = false;
   console.warn("⚠️ Disconnected:", reason);
   
