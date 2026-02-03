@@ -1,7 +1,8 @@
 const { SlashCommandBuilder, MessageFlags } = require('discord.js');
+const http = require('http');
 require('dotenv').config();
 
-const ALLOWED_USERS = process.env.ALLOWED_USERS.split(',');
+const ALLOWED_USERS = process.env.ALLOWED_USERS?.split(',') || [];
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -16,14 +17,16 @@ module.exports = {
 
   async execute(interaction, db) {
     // Defer IMMEDIATELY - Discord only gives 3 seconds
-    // Wrap in try-catch to handle duplicate interactions (Discord retries)
+    // Check state first to avoid race conditions
+    if (interaction.deferred || interaction.replied) {
+      console.warn('[testwhatsapp] Interaction already handled, skipping');
+      return;
+    }
+
     try {
-      if (!interaction.deferred && !interaction.replied) {
-        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-      }
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     } catch (deferErr) {
-      // Already deferred/replied - this is a retry, ignore
-      console.warn('[testwhatsapp] Defer failed (likely retry):', deferErr.message);
+      console.warn('[testwhatsapp] Defer failed:', deferErr.message);
       return;
     }
 
@@ -39,30 +42,34 @@ module.exports = {
     const testMessage = customMessage || `🧪 Test message from Discord!\n\nSent by: ${interaction.user.tag}\nTime: ${new Date().toISOString()}`;
 
     try {
-      const fetch = (...args) => import('node-fetch').then(({ default: fetch }) => fetch(...args));
-
       const waPort = process.env.WA_PORT || 3001;
-      const response = await fetch(`http://localhost:${waPort}/send-whatsapp`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: testMessage }),
+      
+      // Use native http instead of dynamic import for speed
+      const result = await new Promise((resolve, reject) => {
+        const postData = JSON.stringify({ message: testMessage });
+        const req = http.request({
+          hostname: 'localhost',
+          port: waPort,
+          path: '/send-whatsapp',
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Content-Length': Buffer.byteLength(postData),
+          },
+        }, (res) => {
+          let data = '';
+          res.on('data', chunk => data += chunk);
+          res.on('end', () => resolve({ ok: res.statusCode === 200, status: res.statusCode, text: data }));
+        });
+        req.on('error', reject);
+        req.write(postData);
+        req.end();
       });
 
-      if (response.ok) {
+      if (result.ok) {
         await interaction.editReply({
           content: `✅ Test message sent to WhatsApp!\n\n**Message:**\n\`\`\`${testMessage}\`\`\``,
         });
       } else {
-        const errorText = await response.text();
         await interaction.editReply({
-          content: `❌ Failed to send message: ${errorText}`,
-        });
-      }
-    } catch (err) {
-      console.error('[TESTWHATSAPP ERROR]', err);
-      await interaction.editReply({
-        content: `❌ Error connecting to WhatsApp middleware: ${err.message}\n\nMake sure the WhatsApp server is running.`,
-      });
-    }
-  },
-};
+          content: `❌ Failed to send message: ${result.text}`,
