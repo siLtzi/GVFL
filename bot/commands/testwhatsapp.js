@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, MessageFlags } = require('discord.js');
+const { SlashCommandBuilder } = require('discord.js');
 const http = require('http');
 require('dotenv').config();
 
@@ -24,9 +24,12 @@ module.exports = {
     }
 
     try {
-      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+      await interaction.reply({
+        content: "⏳ Sending test message to WhatsApp...",
+        ephemeral: true,
+      });
     } catch (deferErr) {
-      console.warn('[testwhatsapp] Defer failed:', deferErr.message);
+      console.warn('[testwhatsapp] Reply failed:', deferErr.message);
       return;
     }
 
