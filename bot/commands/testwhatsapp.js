@@ -16,7 +16,16 @@ module.exports = {
 
   async execute(interaction, db) {
     // Defer IMMEDIATELY - Discord only gives 3 seconds
-    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    // Wrap in try-catch to handle duplicate interactions (Discord retries)
+    try {
+      if (!interaction.deferred && !interaction.replied) {
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+      }
+    } catch (deferErr) {
+      // Already deferred/replied - this is a retry, ignore
+      console.warn('[testwhatsapp] Defer failed (likely retry):', deferErr.message);
+      return;
+    }
 
     const userId = interaction.user.id;
 
