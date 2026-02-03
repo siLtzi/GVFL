@@ -73,3 +73,13 @@ module.exports = {
       } else {
         await interaction.editReply({
           content: `❌ Failed to send message: ${result.text}`,
+        });
+      }
+    } catch (err) {
+      console.error('[TESTWHATSAPP ERROR]', err);
+      await interaction.editReply({
+        content: `❌ Error connecting to WhatsApp middleware: ${err.message}\n\nMake sure the WhatsApp server is running.`,
+      });
+    }
+  },
+};
