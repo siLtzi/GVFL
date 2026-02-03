@@ -350,6 +350,7 @@ app.get("/health", (_req, res) => {
 app.get("/wa-debug", async (_req, res) => {
   const state = await waClient?.getState().catch(() => null);
   lastState = state || lastState;
+  if (state === "CONNECTED") ready = true;
   res.json({
     ready,
     hasClient: !!waClient,
@@ -362,11 +363,38 @@ app.get("/wa-debug", async (_req, res) => {
 // List WhatsApp groups for troubleshooting
 app.get("/wa-groups", async (_req, res) => {
   try {
-    const chats = await waClient.getChats();
-    const groups = chats
-      .filter((c) => c.isGroup)
-      .map((c) => ({ id: c.id?._serialized, name: c.name }))
-      .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+    const state = await waClient?.getState().catch(() => null);
+    lastState = state || lastState;
+    if (state !== "CONNECTED") {
+      return res.status(503).send(`Client not connected (state: ${state || "unknown"})`);
+    }
+    ready = true;
+
+    let groups = [];
+    try {
+      const chats = await waClient.getChats();
+      groups = chats
+        .filter((c) => c.isGroup)
+        .map((c) => ({ id: c.id?._serialized, name: c.name }))
+        .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+    } catch (err) {
+      console.warn("⚠️ getChats failed, trying Store fallback:", err?.message || err);
+      groups = await waClient.pupPage.evaluate(() => {
+        try {
+          const chats = window.Store?.Chat?.getModelsArray?.() || [];
+          return chats
+            .filter((c) => c.isGroup)
+            .map((c) => ({ id: c.id?._serialized, name: c.name || c.formattedTitle || null }));
+        } catch (e) {
+          return { __error: e?.message || String(e) };
+        }
+      });
+      if (groups && groups.__error) {
+        return res.status(500).send(groups.__error);
+      }
+      groups = groups.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+    }
+
     res.json({ count: groups.length, groups });
   } catch (err) {
     res.status(500).send(err?.message || String(err));
