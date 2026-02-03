@@ -15,16 +15,16 @@ module.exports = {
     ),
 
   async execute(interaction, db) {
+    // Defer IMMEDIATELY - Discord only gives 3 seconds
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
     const userId = interaction.user.id;
 
     if (!ALLOWED_USERS.includes(userId)) {
-      return interaction.reply({
+      return interaction.editReply({
         content: '❌ You are not authorized to run this command.',
-        flags: MessageFlags.Ephemeral,
       });
     }
-
-    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     const customMessage = interaction.options.getString('message');
     const testMessage = customMessage || `🧪 Test message from Discord!\n\nSent by: ${interaction.user.tag}\nTime: ${new Date().toISOString()}`;
