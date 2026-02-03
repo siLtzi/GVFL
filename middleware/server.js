@@ -62,7 +62,8 @@ async function safeSendMessage(client, to, text, retries = 6) {
 }
 
 /* -------------------- WhatsApp init (wwebjs) -------------------- */
-const TOKENS_DIR = path.join(__dirname, "tokens", "gvfl-bot");
+// Tokens stored in project root /tokens/gvfl-bot, not /middleware/tokens
+const TOKENS_DIR = path.join(__dirname, "..", "tokens", "gvfl-bot");
 
 waClient = new Client({
   authStrategy: new LocalAuth({
@@ -80,15 +81,17 @@ waClient.on("qr", (qr) => {
   console.log(
     "📲 Scan this QR with your WhatsApp app (WhatsApp → Linked devices → Link a device):"
   );
+  console.log("⚠️  WhatsApp session not found - QR code generated. Please scan to authenticate.");
   qrcode.generate(qr, { small: true }); // terminal-friendly QR only
 });
 
-waClient.on("authenticated", () => console.log("🔐 Authenticated"));
+waClient.on("authenticated", () => console.log("🔐 Authenticated - session saved"));
 waClient.on("auth_failure", (m) => console.error("❌ Auth failure:", m));
 waClient.on("ready", () => {
   ready = true;
-  console.log("✅ WhatsApp ready");
-  console.log("📂 Tokens directory:", TOKENS_DIR);
+  console.log("✅ WhatsApp ready and connected!");
+  console.log("📂 Session stored in:", TOKENS_DIR);
+  console.log("👤 Logged in as:", waClient.info?.pushname || waClient.info?.wid?.user || "unknown");
 });
 waClient.on("disconnected", async (reason) => {
   ready = false;
@@ -253,8 +256,14 @@ app.get("/health", (_req, res) => {
 
 // Discord ➜ WhatsApp
 app.post("/send-whatsapp", async (req, res) => {
-  if (!waClient) return res.status(503).send("WhatsApp client not initialized");
-  if (!ready) return res.status(503).send("WhatsApp not connected. Scan QR first.");
+  if (!waClient) {
+    console.error("❌ WhatsApp client not initialized");
+    return res.status(503).send("WhatsApp client not initialized");
+  }
+  if (!ready) {
+    console.error("❌ WhatsApp not ready. Check PM2 logs for QR code to scan.");
+    return res.status(503).send("WhatsApp not connected. Check PM2 logs for QR code.");
+  }
 
   const { message, event, fantasyLink, hltvLink, timestamp, to } = req.body;
   let finalMessage = "";
