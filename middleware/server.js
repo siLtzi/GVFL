@@ -62,18 +62,34 @@ async function safeSendMessage(client, to, text, retries = 6) {
 }
 
 /* -------------------- WhatsApp init (wwebjs) -------------------- */
-// Tokens stored in project root /tokens/gvfl-bot, not /middleware/tokens
-const TOKENS_DIR = path.join(__dirname, "..", "tokens", "gvfl-bot");
+// Use a dedicated directory for wwebjs session (separate from old Venom tokens)
+const TOKENS_DIR = path.join(__dirname, "..", "wwebjs_session");
+
+// Ensure directory exists
+if (!fs.existsSync(TOKENS_DIR)) {
+  fs.mkdirSync(TOKENS_DIR, { recursive: true });
+}
+
+console.log("📂 WhatsApp session directory:", TOKENS_DIR);
 
 waClient = new Client({
   authStrategy: new LocalAuth({
     clientId: "gvfl-bot",
-    dataPath: TOKENS_DIR, // persists under ./tokens/gvfl-bot/.wwebjs_auth
+    dataPath: TOKENS_DIR,
   }),
   puppeteer: {
     headless: true,
-    executablePath: exePath, // ✅ cross-platform chromium path
-    args: ["--no-sandbox", "--disable-dev-shm-usage"], // Add sandbox args for Windows
+    executablePath: exePath,
+    args: [
+      "--no-sandbox",
+      "--disable-setuid-sandbox",
+      "--disable-dev-shm-usage",
+      "--disable-accelerated-2d-canvas",
+      "--no-first-run",
+      "--no-zygote",
+      "--single-process",
+      "--disable-gpu",
+    ],
   },
 });
 
@@ -117,7 +133,16 @@ waClient.on("disconnected", async (reason) => {
         puppeteer: {
           headless: true,
           executablePath: exePath,
-          args: ["--no-sandbox", "--disable-dev-shm-usage"], // Add sandbox args for Windows
+          args: [
+            "--no-sandbox",
+            "--disable-setuid-sandbox",
+            "--disable-dev-shm-usage",
+            "--disable-accelerated-2d-canvas",
+            "--no-first-run",
+            "--no-zygote",
+            "--single-process",
+            "--disable-gpu",
+          ],
         },
       });
 
