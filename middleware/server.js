@@ -25,6 +25,7 @@ app.use(bodyParser.json());
 /* -------------------- state -------------------- */
 let waClient = null;
 let ready = false;
+let lastState = null;
 
 /* -------------------- utils -------------------- */
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -33,10 +34,10 @@ async function safeSendMessage(client, to, text, retries = 6) {
   for (let i = 0; i < retries; i++) {
     try {
       if (!ready) throw new Error("Not ready yet");
-      
-      // Check if client page is still valid
-      if (!client?.pupPage || client.pupPage.isClosed()) {
-        throw new Error("Browser page is closed or detached");
+
+      const state = await client.getState().catch(() => null);
+      if (state && state !== "CONNECTED") {
+        throw new Error(`Client state: ${state}`);
       }
       
       await sleep(150); // small settle delay
@@ -103,24 +104,61 @@ waClient.on("qr", (qr) => {
 
 // Workaround for WhatsApp A/B testing bug where "ready" event never fires
 let authTimeout = null;
+let statePoll = null;
+
+const startStatePolling = (reason) => {
+  if (statePoll) clearInterval(statePoll);
+  const startedAt = Date.now();
+  statePoll = setInterval(async () => {
+    try {
+      const state = await waClient.getState();
+      lastState = state;
+      if (state === "CONNECTED") {
+        ready = true;
+        console.log("✅ WhatsApp connected (state polling)");
+        console.log("👤 Logged in as:", waClient.info?.pushname || waClient.info?.wid?.user || "unknown");
+        clearInterval(statePoll);
+        statePoll = null;
+      }
+    } catch (err) {
+      console.warn("⚠️  State poll failed:", err?.message || err);
+    }
+
+    if (Date.now() - startedAt > 60000) {
+      console.warn(`⚠️  State poll timeout (${reason}) - still not CONNECTED`);
+      clearInterval(statePoll);
+      statePoll = null;
+    }
+  }, 3000);
+};
+
 waClient.on("authenticated", () => {
   console.log("🔐 Authenticated - session saved");
-  
-  // If ready doesn't fire in 30 seconds, assume we're ready anyway
+
+  // If ready doesn't fire, rely on state polling instead of forcing ready
   if (authTimeout) clearTimeout(authTimeout);
   authTimeout = setTimeout(() => {
     if (!ready) {
-      console.log("⚠️  Ready event didn't fire (WhatsApp A/B bug), forcing ready state...");
-      ready = true;
-      console.log("✅ WhatsApp ready (forced after auth timeout)");
-      console.log("👤 Logged in as:", waClient.info?.pushname || waClient.info?.wid?.user || "unknown");
+      console.log("⚠️  Ready event didn't fire (WhatsApp A/B bug), starting state polling...");
+      startStatePolling("post-auth");
     }
-  }, 30000);
+  }, 10000);
 });
 
 waClient.on("auth_failure", (m) => {
   if (authTimeout) clearTimeout(authTimeout);
   console.error("❌ Auth failure:", m);
+});
+
+waClient.on("change_state", (state) => {
+  lastState = state;
+  console.log("🔄 WhatsApp state:", state);
+  if (state === "CONNECTED") {
+    ready = true;
+  }
+  if (["UNPAIRED", "UNPAIRED_IDLE", "CONFLICT", "DEPRECATED_VERSION", "TOS_BLOCK", "TIMEOUT"].includes(state)) {
+    ready = false;
+  }
 });
 
 waClient.on("ready", () => {
@@ -132,6 +170,7 @@ waClient.on("ready", () => {
 });
 waClient.on("disconnected", async (reason) => {
   if (authTimeout) clearTimeout(authTimeout);
+  if (statePoll) clearInterval(statePoll);
   ready = false;
   console.warn("⚠️ Disconnected:", reason);
   
@@ -178,6 +217,12 @@ waClient.on("disconnected", async (reason) => {
       waClient.on("ready", () => {
         ready = true;
         console.log("✅ WhatsApp ready (reconnected)");
+      });
+      waClient.on("change_state", (state) => {
+        lastState = state;
+        console.log("🔄 WhatsApp state:", state);
+        if (state === "CONNECTED") ready = true;
+        if (["UNPAIRED", "UNPAIRED_IDLE", "CONFLICT", "DEPRECATED_VERSION", "TOS_BLOCK", "TIMEOUT"].includes(state)) ready = false;
       });
       waClient.on("disconnected", arguments.callee); // Recursively attach this handler
 
@@ -288,14 +333,14 @@ function extractIdsFromLink(url) {
 
 // Health check for Discord command retry logic
 app.get("/wa-ready", (_req, res) => {
-  res.json({ ready, hasClient: !!waClient, me: waClient?.info?.wid?._serialized || null });
+  res.json({ ready, hasClient: !!waClient, me: waClient?.info?.wid?._serialized || null, state: lastState || null });
 });
 
 // General health check endpoint
 app.get("/health", (_req, res) => {
   res.json({
     status: "ok",
-    whatsapp: { ready, connected: !!waClient?.info?.wid },
+    whatsapp: { ready, connected: !!waClient?.info?.wid, state: lastState || null },
     uptime: process.uptime(),
     timestamp: new Date().toISOString(),
   });
@@ -308,8 +353,14 @@ app.post("/send-whatsapp", async (req, res) => {
     return res.status(503).send("WhatsApp client not initialized");
   }
   if (!ready) {
-    console.error("❌ WhatsApp not ready. Check PM2 logs for QR code to scan.");
-    return res.status(503).send("WhatsApp not connected. Check PM2 logs for QR code.");
+    const state = await waClient.getState().catch(() => null);
+    lastState = state;
+    if (state === "CONNECTED") {
+      ready = true;
+    } else {
+      console.error("❌ WhatsApp not ready. Check PM2 logs for QR code to scan.");
+      return res.status(503).send("WhatsApp not connected. Check PM2 logs for QR code.");
+    }
   }
 
   const { message, event, fantasyLink, hltvLink, timestamp, to } = req.body;
