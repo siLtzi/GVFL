@@ -346,6 +346,19 @@ app.get("/health", (_req, res) => {
   });
 });
 
+// Debug endpoint for WhatsApp client status
+app.get("/wa-debug", async (_req, res) => {
+  const state = await waClient?.getState().catch(() => null);
+  lastState = state || lastState;
+  res.json({
+    ready,
+    hasClient: !!waClient,
+    state: state || null,
+    me: waClient?.info?.wid?._serialized || null,
+    pushname: waClient?.info?.pushname || null,
+  });
+});
+
 // Discord ➜ WhatsApp
 app.post("/send-whatsapp", async (req, res) => {
   if (!waClient) {
@@ -381,6 +394,22 @@ app.post("/send-whatsapp", async (req, res) => {
   try {
     const target = to || process.env.WHATSAPP_GROUP_ID;
     if (!target) return res.status(400).send("Missing target (to) and WHATSAPP_GROUP_ID not set");
+
+    if (!target.includes("@")) {
+      console.error("❌ Invalid WhatsApp target (missing @):", target);
+      return res.status(400).send(
+        "Invalid WhatsApp target. Must be a full chat id like 12345@g.us or 1234567890@c.us"
+      );
+    }
+
+    try {
+      await waClient.getChatById(target);
+    } catch (e) {
+      console.error("❌ Invalid WhatsApp target:", target, e?.message || e);
+      return res.status(404).send(
+        `Invalid WhatsApp target: ${target}. Ensure WHATSAPP_GROUP_ID is correct.`
+      );
+    }
 
     await safeSendMessage(waClient, target, finalMessage);
     console.log("✅ WhatsApp message sent");

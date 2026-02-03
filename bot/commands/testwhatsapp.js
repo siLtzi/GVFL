@@ -1,4 +1,4 @@
-const { SlashCommandBuilder } = require('discord.js');
+const { SlashCommandBuilder, MessageFlags } = require('discord.js');
 const http = require('http');
 require('dotenv').config();
 
@@ -23,14 +23,15 @@ module.exports = {
       return;
     }
 
+    let canReply = true;
     try {
       await interaction.reply({
         content: "⏳ Sending test message to WhatsApp...",
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
-    } catch (deferErr) {
-      console.warn('[testwhatsapp] Reply failed:', deferErr.message);
-      return;
+    } catch (replyErr) {
+      canReply = false;
+      console.warn('[testwhatsapp] Reply failed:', replyErr.message);
     }
 
     const userId = interaction.user.id;
@@ -69,20 +70,24 @@ module.exports = {
         req.end();
       });
 
-      if (result.ok) {
-        await interaction.editReply({
-          content: `✅ Test message sent to WhatsApp!\n\n**Message:**\n\`\`\`${testMessage}\`\`\``,
-        });
-      } else {
-        await interaction.editReply({
-          content: `❌ Failed to send message: ${result.text}`,
-        });
+      if (canReply) {
+        if (result.ok) {
+          await interaction.editReply({
+            content: `✅ Test message sent to WhatsApp!\n\n**Message:**\n\`\`\`${testMessage}\`\`\``,
+          });
+        } else {
+          await interaction.editReply({
+            content: `❌ Failed to send message: ${result.text}`,
+          });
+        }
       }
     } catch (err) {
       console.error('[TESTWHATSAPP ERROR]', err);
-      await interaction.editReply({
-        content: `❌ Error connecting to WhatsApp middleware: ${err.message}\n\nMake sure the WhatsApp server is running.`,
-      });
+      if (canReply) {
+        await interaction.editReply({
+          content: `❌ Error connecting to WhatsApp middleware: ${err.message}\n\nMake sure the WhatsApp server is running.`,
+        });
+      }
     }
   },
 };
