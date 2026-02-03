@@ -2,6 +2,8 @@
  * Shared utility functions for GVFL bot
  */
 
+const { MessageFlags } = require('discord.js');
+
 /**
  * Convert placement number to ordinal string
  * @param {number} n - Placement number (1, 2, or 3)
@@ -62,7 +64,7 @@ async function safeReply(interaction, options) {
  * @param {string} message - Error message
  */
 async function safeErrorReply(interaction, message) {
-  return safeReply(interaction, { content: message, ephemeral: true });
+  return safeReply(interaction, { content: message, flags: MessageFlags.Ephemeral });
 }
 
 module.exports = {

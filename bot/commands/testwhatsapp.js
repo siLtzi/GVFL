@@ -1,4 +1,4 @@
-const { SlashCommandBuilder } = require('discord.js');
+const { SlashCommandBuilder, MessageFlags } = require('discord.js');
 require('dotenv').config();
 
 const ALLOWED_USERS = process.env.ALLOWED_USERS.split(',');
@@ -18,13 +18,13 @@ module.exports = {
     const userId = interaction.user.id;
 
     if (!ALLOWED_USERS.includes(userId)) {
-      return await interaction.reply({
+      return interaction.reply({
         content: '❌ You are not authorized to run this command.',
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
     }
 
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     const customMessage = interaction.options.getString('message');
     const testMessage = customMessage || `🧪 Test message from Discord!\n\nSent by: ${interaction.user.tag}\nTime: ${new Date().toISOString()}`;

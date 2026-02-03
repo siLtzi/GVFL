@@ -5,6 +5,7 @@ const {
   REST,
   Routes,
   EmbedBuilder,
+  MessageFlags,
 } = require("discord.js");
 const { DateTime } = require("luxon");
 const fs = require("fs");
@@ -68,9 +69,9 @@ client.on("interactionCreate", async (interaction) => {
     const errorMessage = "There was an error executing that command.";
     try {
       if (interaction.deferred || interaction.replied) {
-        await interaction.editReply({ content: errorMessage, ephemeral: true });
+        await interaction.editReply({ content: errorMessage });
       } else {
-        await interaction.reply({ content: errorMessage, ephemeral: true });
+        await interaction.reply({ content: errorMessage, flags: MessageFlags.Ephemeral });
       }
     } catch (replyError) {
       console.error("Failed to send error reply:", replyError.message);
