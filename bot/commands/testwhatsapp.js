@@ -25,13 +25,10 @@ module.exports = {
 
     let canReply = true;
     try {
-      await interaction.reply({
-        content: "⏳ Sending test message to WhatsApp...",
-        flags: MessageFlags.Ephemeral,
-      });
-    } catch (replyErr) {
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    } catch (deferErr) {
       canReply = false;
-      console.warn('[testwhatsapp] Reply failed:', replyErr.message);
+      console.warn('[testwhatsapp] Defer failed:', deferErr.message);
     }
 
     const userId = interaction.user.id;
