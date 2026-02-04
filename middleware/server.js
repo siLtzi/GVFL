@@ -21,6 +21,7 @@ console.log("Using Chromium at:", exePath);
 
 const app = express();
 app.use(bodyParser.json());
+const WA_DEBUG = process.env.WHATSAPP_DEBUG === "1" || process.env.WHATSAPP_DEBUG === "true";
 
 /* -------------------- state -------------------- */
 let waClient = null;
@@ -242,6 +243,14 @@ waClient.initialize().catch((err) =>
 /* ---- inbound messages from WhatsApp (ported from Venom version) ---- */
 waClient.on("message", async (message) => {
   try {
+    if (WA_DEBUG) {
+      console.log("📥 WA message", {
+        from: message.from,
+        isGroup: message.isGroup,
+        fromMe: message.fromMe,
+        body: message.body?.slice?.(0, 200),
+      });
+    }
     if (message.isGroup && message.from !== process.env.WHATSAPP_GROUP_ID) {
       console.log("ℹ️ Incoming group message from:", message.from, "(not configured group)");
       return;
@@ -325,6 +334,17 @@ waClient.on("message", async (message) => {
   } catch (e) {
     console.error("on message error:", e?.message || e);
   }
+});
+
+// Log outbound/own messages to confirm events are firing
+waClient.on("message_create", (message) => {
+  if (!WA_DEBUG) return;
+  console.log("📤 WA message_create", {
+    from: message.from,
+    isGroup: message.isGroup,
+    fromMe: message.fromMe,
+    body: message.body?.slice?.(0, 200),
+  });
 });
 
 /* -------------------- helpers & routes -------------------- */
