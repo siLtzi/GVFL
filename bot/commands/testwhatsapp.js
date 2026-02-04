@@ -44,11 +44,47 @@ module.exports = {
 
     try {
       const waPort = process.env.WA_PORT || 3001;
-      
-      // Use native http instead of dynamic import for speed
-      const result = await new Promise((resolve, reject) => {
-        const postData = JSON.stringify({ message: testMessage });
-        const req = http.request({
+
+      const request = (options, body) => new Promise((resolve, reject) => {
+        const req = http.request(options, (res) => {
+          let data = '';
+          res.on('data', chunk => data += chunk);
+          res.on('end', () => resolve({ ok: res.statusCode === 200, status: res.statusCode, text: data }));
+        });
+        req.on('error', reject);
+        if (body) req.write(body);
+        req.end();
+      });
+
+      let health = null;
+      try {
+        const healthRes = await request({
+          hostname: 'localhost',
+          port: waPort,
+          path: '/health',
+          method: 'GET',
+        });
+        if (healthRes.ok) health = JSON.parse(healthRes.text);
+      } catch (healthErr) {
+        console.warn('[testwhatsapp] Health check failed:', healthErr.message);
+      }
+
+      const postData = JSON.stringify({ message: testMessage });
+      let result = await request({
+        hostname: 'localhost',
+        port: waPort,
+        path: '/send-whatsapp',
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(postData),
+        },
+      }, postData);
+
+      // If health says connected but send failed, retry once
+      if (!result.ok && health?.whatsapp?.ready) {
+        await new Promise(r => setTimeout(r, 1500));
+        result = await request({
           hostname: 'localhost',
           port: waPort,
           path: '/send-whatsapp',
@@ -57,15 +93,8 @@ module.exports = {
             'Content-Type': 'application/json',
             'Content-Length': Buffer.byteLength(postData),
           },
-        }, (res) => {
-          let data = '';
-          res.on('data', chunk => data += chunk);
-          res.on('end', () => resolve({ ok: res.statusCode === 200, status: res.statusCode, text: data }));
-        });
-        req.on('error', reject);
-        req.write(postData);
-        req.end();
-      });
+        }, postData);
+      }
 
       if (canReply) {
         if (result.ok) {
@@ -73,8 +102,11 @@ module.exports = {
             content: `✅ Test message sent to WhatsApp!\n\n**Message:**\n\`\`\`${testMessage}\`\`\``,
           });
         } else {
+          const stateInfo = health?.whatsapp
+            ? `\n\nState: ${health.whatsapp.state || 'unknown'} (ready=${health.whatsapp.ready})`
+            : '';
           await interaction.editReply({
-            content: `❌ Failed to send message: ${result.text}`,
+            content: `❌ Failed to send message: ${result.text}${stateInfo}`,
           });
         }
       }
