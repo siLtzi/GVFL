@@ -2,6 +2,7 @@ const { getFantasyLeagueStatus, getLeaguePlacements } = require("./hltvApi");
 const { ordinal } = require("../bot/utils/helpers");
 const { EmbedBuilder } = require("discord.js");
 const fetch = (...args) => import("node-fetch").then(({ default: fetch }) => fetch(...args));
+const admin = require("firebase-admin");
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -21,6 +22,35 @@ async function fetchWithRetry(url, options, maxRetries = 3) {
 }
 
 const pointsMap = { 1: 10, 2: 6, 3: 4, 4: 3, 5: 2, 6: 1 };
+
+/**
+ * Update a user's scores in a specific collection (allTimeScores or seasons/{season}/scores)
+ */
+async function updateScores(db, collectionPath, username, placement, points) {
+  const docRef = db.collection(collectionPath).doc(username);
+  const doc = await docRef.get();
+  const current = doc.exists ? doc.data() : {};
+
+  const newData = {
+    username,
+    points: (current.points || 0) + points,
+    first: (current.first || 0) + (placement === 1 ? 1 : 0),
+    second: (current.second || 0) + (placement === 2 ? 1 : 0),
+    third: (current.third || 0) + (placement === 3 ? 1 : 0),
+    fourth: (current.fourth || 0) + (placement === 4 ? 1 : 0),
+    fifth: (current.fifth || 0) + (placement === 5 ? 1 : 0),
+    sixth: (current.sixth || 0) + (placement === 6 ? 1 : 0),
+    lastUpdated: new Date(),
+  };
+
+  // Also track events count for allTimeScores
+  if (collectionPath === 'allTimeScores') {
+    newData.events = (current.events || 0) + 1;
+  }
+
+  await docRef.set(newData, { merge: true });
+  return newData;
+}
 
 /**
  * Load users collection and build a lookup map: hltvName -> preferredName
@@ -124,6 +154,19 @@ const checkFantasyLeagues = async (db) => {
       }, { merge: true });
 
       console.log(`✅ Standings updated for ${eventName}`);
+
+      // ✅ Update allTimeScores and season scores for top 6
+      for (const p of top6) {
+        try {
+          await updateScores(db, 'allTimeScores', p.username, p.placement, p.points);
+          console.log(`📊 Updated allTimeScores for ${p.username} (+${p.points})`);
+          
+          await updateScores(db, `seasons/${season}/scores`, p.username, p.placement, p.points);
+          console.log(`📊 Updated ${season} scores for ${p.username} (+${p.points})`);
+        } catch (err) {
+          console.error(`❌ Failed to update scores for ${p.username}:`, err.message);
+        }
+      }
 
       // Log to logs collection
       for (const p of top6) {
