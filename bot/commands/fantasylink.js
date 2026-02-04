@@ -14,13 +14,15 @@ module.exports = {
     ),
 
   async execute(interaction, db) {
+    // Defer immediately - HLTV fetching can take more than 3 seconds
+    await interaction.deferReply();
+    
     const fantasyLink = interaction.options.getString("link");
     const matches = fantasyLink.match(/fantasy\/(\d+)\/league\/(\d+)/);
 
     if (!matches) {
-      return await interaction.reply({
-        content: "❌ Invalid fantasy league link.",
-        ephemeral: true,
+      return await interaction.editReply({
+        content: "❌ Invalid fantasy league link."
       });
     }
 
@@ -52,9 +54,8 @@ module.exports = {
         json = JSON.parse(text);
       } catch (err) {
         console.error("❌ Failed to parse HLTV JSON:", err.message);
-        return await interaction.reply({
-          content: "❌ HLTV returned unexpected data (possibly blocked or down).",
-          ephemeral: true,
+        return await interaction.editReply({
+          content: "❌ HLTV returned unexpected data (possibly blocked or down)."
         });
       }
 
@@ -93,9 +94,8 @@ module.exports = {
       }
     } catch (err) {
       console.error("❌ Failed to fetch fantasy overview:", err.message);
-      return await interaction.reply({
-        content: "Failed to fetch HLTV data from link.",
-        ephemeral: true,
+      return await interaction.editReply({
+        content: "❌ Failed to fetch HLTV data from link."
       });
     }
 
@@ -114,9 +114,8 @@ module.exports = {
       });
     } catch (err) {
       console.error("❌ Error saving to Firebase:", err.message);
-      return await interaction.reply({
-        content: "Failed to save to database.",
-        ephemeral: true,
+      return await interaction.editReply({
+        content: "❌ Failed to save to database."
       });
     }
 
@@ -132,7 +131,7 @@ module.exports = {
         { name: "🏆 Teams Attending", value: eventTeams }
       );
 
-      await interaction.reply({ content: `${gvflRoleMention}`, embeds: [embed] });
+      await interaction.editReply({ content: `${gvflRoleMention}`, embeds: [embed] });
 
     try {
       await require("axios").post("http://localhost:3001/send-whatsapp", {
