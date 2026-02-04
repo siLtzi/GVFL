@@ -11,12 +11,13 @@ module.exports = {
     .setDescription('Undo the most recent add/remove placement action'),
 
   async execute(interaction, db) {
+    await interaction.deferReply();
+    
     const userIdExecuting = interaction.user.id;
 
     if (!ALLOWED_USERS.includes(userIdExecuting)) {
-      return await interaction.reply({
-        content: '❌ You are not authorized to use this command.',
-        ephemeral: true,
+      return await interaction.editReply({
+        content: '❌ You are not authorized to use this command.'
       });
     }
 
@@ -26,7 +27,7 @@ module.exports = {
       .get();
 
     if (logsSnap.empty) {
-      return await interaction.reply({ content: 'No actions to undo.', ephemeral: true });
+      return await interaction.editReply({ content: 'No actions to undo.' });
     }
 
     const lastAction = logsSnap.docs[0];
@@ -35,9 +36,8 @@ module.exports = {
     console.log("[UNDO] Last action:", data);
 
     if (!data.eventName || !data.username || !data.placement) {
-      return await interaction.reply({
-        content: '❌ Cannot undo: missing event, username, or placement in log.',
-        ephemeral: true
+      return await interaction.editReply({
+        content: '❌ Cannot undo: missing event, username, or placement in log.'
       });
     }
 
@@ -65,9 +65,8 @@ module.exports = {
           addedBy: `undo by ${interaction.user.username}`,
         });
       } else {
-        return await interaction.reply({
-          content: `❌ Unknown action type: ${data.action}`,
-          ephemeral: true
+        return await interaction.editReply({
+          content: `❌ Unknown action type: ${data.action}`
         });
       }
 
@@ -83,12 +82,11 @@ module.exports = {
           `Season: ${data.season}`
         );
 
-      await interaction.reply({ embeds: [embed] });
+      await interaction.editReply({ embeds: [embed] });
     } catch (err) {
       console.error("❌ Failed to undo:", err);
-      await interaction.reply({
-        content: `❌ Failed to undo: ${err.message}`,
-        ephemeral: true,
+      await interaction.editReply({
+        content: `❌ Failed to undo: ${err.message}`
       });
     }
   }

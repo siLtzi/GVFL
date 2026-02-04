@@ -14,20 +14,20 @@ module.exports = {
     ),
 
   async execute(interaction, db) {
+    await interaction.deferReply({ ephemeral: true });
+    
     const confirm = interaction.options.getBoolean('confirm');
     const userId = interaction.user.id;
 
     if (userId !== ADMIN_USER_ID) {
-      return await interaction.reply({
-        content: '❌ You are not authorized to run this command.',
-        ephemeral: true
+      return await interaction.editReply({
+        content: '❌ You are not authorized to run this command.'
       });
     }
 
     if (!confirm) {
-      return await interaction.reply({
-        content: '❌ Confirmation not given. Pass `confirm: true` to proceed.',
-        ephemeral: true
+      return await interaction.editReply({
+        content: '❌ Confirmation not given. Pass `confirm: true` to proceed.'
       });
     }
 
@@ -64,6 +64,6 @@ module.exports = {
     await deleteCollection('fantasyLinks');
 
     console.log("[NUKE] Done!");
-    await interaction.reply('💣 All GVFL data has been nuked, including fantasy links.');
+    await interaction.editReply('💣 All GVFL data has been nuked, including fantasy links.');
   }
 };

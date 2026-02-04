@@ -15,12 +15,13 @@ module.exports = {
         .setRequired(true)),
 
   async execute(interaction, db) {
+    await interaction.deferReply({ ephemeral: true });
+    
     const userId = interaction.user.id;
 
     if (!ALLOWED_USERS.includes(userId)) {
-      return await interaction.reply({
-        content: '❌ You are not authorized to use this command.',
-        ephemeral: true,
+      return await interaction.editReply({
+        content: '❌ You are not authorized to use this command.'
       });
     }
 
@@ -29,9 +30,8 @@ module.exports = {
     const existing = await seasonRef.get();
 
     if (existing.exists) {
-      return await interaction.reply({
-        content: `Season **${seasonName}** already exists.`,
-        ephemeral: true,
+      return await interaction.editReply({
+        content: `Season **${seasonName}** already exists.`
       });
     }
 
@@ -40,6 +40,6 @@ module.exports = {
       createdBy: userId,
     });
 
-    await interaction.reply(`✅ Season **${seasonName}** created`);
+    await interaction.editReply(`✅ Season **${seasonName}** created`);
   }
 };

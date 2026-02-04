@@ -15,12 +15,13 @@ module.exports = {
     ),
 
   async execute(interaction, db) {
+    await interaction.deferReply();
+    
     const userId = interaction.user.id;
 
     if (!ALLOWED_USERS.includes(userId)) {
-      return await interaction.reply({
-        content: '❌ You are not authorized to use this command.',
-        ephemeral: true,
+      return await interaction.editReply({
+        content: '❌ You are not authorized to use this command.'
       });
     }
 
@@ -28,9 +29,8 @@ module.exports = {
     const scoresSnap = await db.collection(`seasons/${seasonName}/scores`).get();
 
     if (scoresSnap.empty) {
-      return await interaction.reply({
-        content: `❌ No scores found for season \`${seasonName}\`.`,
-        ephemeral: true,
+      return await interaction.editReply({
+        content: `❌ No scores found for season \`${seasonName}\`.`
       });
     }
 
@@ -106,6 +106,6 @@ module.exports = {
       .setThumbnail("https://i.imgur.com/STR5Ww3.png")
       .setDescription(`${winnerText}${divider}${standingsText}`);
 
-    await interaction.reply({ embeds: [embed] });
+    await interaction.editReply({ embeds: [embed] });
   }
 };

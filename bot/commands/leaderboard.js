@@ -6,10 +6,13 @@ module.exports = {
     .setDescription("Show total points across all seasons"),
 
   async execute(interaction, db) {
+    // Defer immediately - Firebase queries can take time
+    await interaction.deferReply();
+    
     const scoresSnap = await db.collection("allTimeScores").get();
 
     if (scoresSnap.empty) {
-      return await interaction.reply("No scores found in all-time records");
+      return await interaction.editReply("No scores found in all-time records");
     }
 
     const spacer = "\u2003"; // EM space
@@ -105,6 +108,6 @@ module.exports = {
       .setThumbnail("https://i.imgur.com/STR5Ww3.png")
       .setDescription(lines.join("\n\n") + divider + winnerSection);
 
-    await interaction.reply({ embeds: [embed] });
+    await interaction.editReply({ embeds: [embed] });
   },
 };

@@ -13,12 +13,13 @@ module.exports = {
         .setRequired(true)),
 
   async execute(interaction, db) {
+    await interaction.deferReply({ ephemeral: true });
+    
     const userIdExecuting = interaction.user.id;
 
     if (!ALLOWED_USERS.includes(userIdExecuting)) {
-      return await interaction.reply({
-        content: '❌ You are not authorized to use this command.',
-        ephemeral: true,
+      return await interaction.editReply({
+        content: '❌ You are not authorized to use this command.'
       });
     }
 
@@ -28,9 +29,8 @@ module.exports = {
     const scoresSnap = await seasonRef.collection('scores').get();
 
     if (scoresSnap.empty) {
-      return await interaction.reply({
-        content: `⚠️ Season **${season}** doesn't exist or has no scores`,
-        ephemeral: true
+      return await interaction.editReply({
+        content: `⚠️ Season **${season}** doesn't exist or has no scores`
       });
     }
 
@@ -41,9 +41,8 @@ module.exports = {
 
     await batch.commit();
 
-    await interaction.reply({
-      content: `✅ Season **${season}** and all related scores have been deleted`,
-      ephemeral: true
+    await interaction.editReply({
+      content: `✅ Season **${season}** and all related scores have been deleted`
     });
 
     // Log deletion action

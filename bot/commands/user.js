@@ -49,12 +49,13 @@ module.exports = {
             .setRequired(true))),
 
   async execute(interaction, db) {
+    await interaction.deferReply({ ephemeral: true });
+    
     const userId = interaction.user.id;
 
     if (!ALLOWED_USERS.includes(userId)) {
-      return await interaction.reply({
-        content: '❌ You are not authorized to use this command.',
-        ephemeral: true,
+      return await interaction.editReply({
+        content: '❌ You are not authorized to use this command.'
       });
     }
 
@@ -64,7 +65,7 @@ module.exports = {
       const usersSnap = await db.collection('users').get();
 
       if (usersSnap.empty) {
-        return await interaction.reply('📭 No users registered.');
+        return await interaction.editReply('📭 No users registered.');
       }
 
       const lines = usersSnap.docs.map(doc => {
@@ -78,7 +79,7 @@ module.exports = {
         .setColor(0x5865f2)
         .setDescription(lines.join('\n'));
 
-      return await interaction.reply({ embeds: [embed] });
+      return await interaction.editReply({ embeds: [embed] });
     }
 
     if (subcommand === 'add') {
@@ -88,9 +89,8 @@ module.exports = {
 
       const existingDoc = await db.collection('users').doc(preferred).get();
       if (existingDoc.exists) {
-        return await interaction.reply({
-          content: `❌ User **${preferred}** already exists.`,
-          ephemeral: true
+        return await interaction.editReply({
+          content: `❌ User **${preferred}** already exists.`
         });
       }
 
@@ -103,7 +103,7 @@ module.exports = {
       });
 
       const discordInfo = discordUser ? ` Discord: ${discordUser.username} (${discordUser.id})` : '';
-      return await interaction.reply(`✅ Added user **${preferred}** (HLTV: \`${hltv}\`)${discordInfo}`);
+      return await interaction.editReply(`✅ Added user **${preferred}** (HLTV: \`${hltv}\`)${discordInfo}`);
     }
 
     if (subcommand === 'edit') {
@@ -115,9 +115,8 @@ module.exports = {
       const userDoc = await userRef.get();
 
       if (!userDoc.exists) {
-        return await interaction.reply({
-          content: `❌ User **${preferred}** not found.`,
-          ephemeral: true
+        return await interaction.editReply({
+          content: `❌ User **${preferred}** not found.`
         });
       }
 
@@ -129,15 +128,14 @@ module.exports = {
       }
 
       if (Object.keys(updates).length === 0) {
-        return await interaction.reply({
-          content: '❌ No updates provided.',
-          ephemeral: true
+        return await interaction.editReply({
+          content: '❌ No updates provided.'
         });
       }
 
       await userRef.update(updates);
 
-      return await interaction.reply(`✅ Updated user **${preferred}**: ${JSON.stringify(updates)}`);
+      return await interaction.editReply(`✅ Updated user **${preferred}**: ${JSON.stringify(updates)}`);
     }
 
     if (subcommand === 'delete') {
@@ -147,15 +145,14 @@ module.exports = {
       const userDoc = await userRef.get();
 
       if (!userDoc.exists) {
-        return await interaction.reply({
-          content: `❌ User **${preferred}** not found.`,
-          ephemeral: true
+        return await interaction.editReply({
+          content: `❌ User **${preferred}** not found.`
         });
       }
 
       await userRef.delete();
 
-      return await interaction.reply(`🗑️ Deleted user **${preferred}**`);
+      return await interaction.editReply(`🗑️ Deleted user **${preferred}**`);
     }
   }
 };

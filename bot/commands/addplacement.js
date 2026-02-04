@@ -27,12 +27,13 @@ module.exports = {
         .setRequired(false)),
 
   async execute(interaction, db) {
+    await interaction.deferReply();
+    
     const userIdExecuting = interaction.user.id;
 
     if (!ALLOWED_USERS.includes(userIdExecuting)) {
-      return await interaction.reply({
-        content: '❌ You are not authorized to use this command.',
-        ephemeral: true,
+      return await interaction.editReply({
+        content: '❌ You are not authorized to use this command.'
       });
     }
 
@@ -42,11 +43,11 @@ module.exports = {
     const customEvent = interaction.options.getString('event');
 
     if (placement < 1 || placement > 6) {
-      return await interaction.reply({ content: 'Placement must be between 1 and 6.', ephemeral: true });
+      return await interaction.editReply({ content: 'Placement must be between 1 and 6.' });
     }
 
     if (!discordUser && !manualName) {
-      return await interaction.reply({ content: 'Provide either user or name.', ephemeral: true });
+      return await interaction.editReply({ content: 'Provide either user or name.' });
     }
 
     // Get the canonical username - this should match your DB names (DeKksu, tapinho, etc.)
@@ -57,7 +58,7 @@ module.exports = {
     const settingsRef = db.collection('settings').doc('config');
     const settingsDoc = await settingsRef.get();
     if (!settingsDoc.exists) {
-      return await interaction.reply({ content: 'No active season.', ephemeral: true });
+      return await interaction.editReply({ content: 'No active season.' });
     }
     const season = settingsDoc.data().currentSeason;
 
@@ -85,12 +86,11 @@ module.exports = {
           `Season: ${season}`
         );
 
-      await interaction.reply({ embeds: [embed] });
+      await interaction.editReply({ embeds: [embed] });
     } catch (err) {
       console.error("❌ Failed to add placement:", err);
-      await interaction.reply({
-        content: `❌ Failed to add placement: ${err.message}`,
-        ephemeral: true,
+      await interaction.editReply({
+        content: `❌ Failed to add placement: ${err.message}`
       });
     }
   }

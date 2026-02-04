@@ -6,13 +6,14 @@ module.exports = {
     .setDescription("Show the leaderboard for the current season"),
 
   async execute(interaction, db) {
+    await interaction.deferReply();
+    
     const settingsRef = db.collection("settings").doc("config");
     const settingsSnap = await settingsRef.get();
 
     if (!settingsSnap.exists) {
-      return await interaction.reply({
-        content: "❌ No active season selected. Use /selectseason first",
-        ephemeral: true,
+      return await interaction.editReply({
+        content: "❌ No active season selected. Use /selectseason first"
       });
     }
 
@@ -36,7 +37,7 @@ module.exports = {
     const scoresSnap = await scoresRef.get();
 
     if (scoresSnap.empty) {
-      return await interaction.reply(
+      return await interaction.editReply(
         `No scores recorded yet for **${season}**`
       );
     }
@@ -77,6 +78,6 @@ module.exports = {
       .setThumbnail("https://i.imgur.com/STR5Ww3.png")
       .setDescription(leaderboardLines.slice(0, 10).join("\n\n"));
 
-    await interaction.reply({ embeds: [embed] });
+    await interaction.editReply({ embeds: [embed] });
   },
 };
