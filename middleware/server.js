@@ -4,12 +4,12 @@ require("dotenv").config();
 const express = require("express");
 const bodyParser = require("body-parser");
 const { DateTime } = require("luxon");
-const fetch = (...args) => import("node-fetch").then(({ default: fetch }) => fetch(...args));
 
 const fs = require("fs");
 const path = require("path");
+const db = require("../bot/utils/firebase");
 
-const { Client, LocalAuth } = require("whatsapp-web.js");
+const { Client, LocalAuth, Poll } = require("whatsapp-web.js");
 const qrcode = require("qrcode-terminal");
 const puppeteer = require("puppeteer");
 
@@ -144,16 +144,25 @@ const attachHandlers = (client) => {
       console.log(`[📨] Message received from group: ${message.body}`);
 
       const fantasyRegex =
-        /(https?:\/\/www\.hltv\.org\/fantasy\/\d+\/league\/\d+\/join\?secret=[^\s]+)/i;
+        /(https?:\/\/(?:www\.)?hltv\.org\/fantasy\/\d+\/league\/\d+\/join\?secret=[^\s]+)/i;
       const match = message.body.match(fantasyRegex);
-      if (!match) return;
+      if (!match) {
+        // Log when body contains "hltv" or "fantasy" but didn't match the join link pattern
+        if (/hltv\.org\/fantasy/i.test(message.body)) {
+          console.log("ℹ️ Message contains a fantasy link but not a /join?secret= link — ignoring");
+        }
+        return;
+      }
 
       const fantasyLink = match[1];
       const { fantasyId, leagueId } = extractIdsFromLink(fantasyLink);
       const overviewUrl = `https://www.hltv.org/fantasy/${fantasyId}/overview/json`;
 
+      console.log(`🔗 Detected fantasy join link: ${fantasyLink}`);
+      console.log(`🆔 fantasyId=${fantasyId}, leagueId=${leagueId}`);
+
       try {
-        const res = await fetch(overviewUrl, {
+        const res = await globalThis.fetch(overviewUrl, {
           headers: {
             "User-Agent": "curl/8.12.1",
             Accept: "application/json",
@@ -162,7 +171,13 @@ const attachHandlers = (client) => {
           },
         });
         const text = await res.text();
-        const json = JSON.parse(text);
+        let json;
+        try {
+          json = JSON.parse(text);
+        } catch (parseErr) {
+          console.error("❌ HLTV returned non-JSON (possibly blocked):", text.slice(0, 300));
+          return;
+        }
 
         const eventName = json.eventName || "Unknown Event";
         let timestamp = "Unknown";
@@ -183,24 +198,51 @@ const attachHandlers = (client) => {
           eventTeams = `${uniqueTeams.size}`;
         }
 
+        // ✅ Save to Firebase so checkFantasyLeagues.js tracks this league
+        try {
+          const existingDoc = await db.collection("fantasyLinks").doc(eventName).get();
+          if (existingDoc.exists) {
+            console.log(`ℹ️ Fantasy link for "${eventName}" already tracked — skipping Firebase save`);
+          } else {
+            await db.collection("fantasyLinks").doc(eventName).set({
+              eventName,
+              fantasyLink,
+              fantasyId,
+              leagueId,
+              hltvLink,
+              readableTime: timestamp,
+              teams: eventTeams,
+              addedBy: "whatsapp",
+              addedByName: message.author || message._data?.notifyName || "unknown",
+              timestamp: Date.now(),
+              processed: false,
+            });
+            console.log(`✅ Saved fantasy link to Firebase: ${eventName}`);
+          }
+        } catch (fbErr) {
+          console.error("❌ Failed to save fantasy link to Firebase:", fbErr.message);
+        }
+
+        // ✅ Forward to Discord via webhook
         const payload = {
           embeds: [
             {
               title: `🎮 ${eventName}`,
-              description: `[JOIN THE LEAGUE](${fantasyLink})`,
+              description: `🔗 [JOIN THE LEAGUE](${fantasyLink})`,
               color: 0x00b894,
               thumbnail: { url: "https://i.imgur.com/STR5Ww3.png" },
               fields: [
                 { name: "🕒 Starts", value: timestamp || "Unknown", inline: true },
                 { name: "🏆 Teams Attending", value: eventTeams, inline: true },
                 { name: "🌐 Event Page", value: `[View](${hltvLink})`, inline: false },
+                { name: "📲 Source", value: "WhatsApp", inline: true },
               ],
               timestamp: new Date().toISOString(),
             },
           ],
         };
 
-        await fetch(process.env.DISCORD_WEBHOOK_URL, {
+        await globalThis.fetch(process.env.DISCORD_WEBHOOK_URL, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
@@ -331,6 +373,39 @@ app.post("/send-whatsapp", async (req, res) => {
   }
 });
 
+app.post("/send-poll", async (req, res) => {
+  if (!waClient) return res.status(503).send("WhatsApp client not initialized");
+
+  const { question, options, allowMultiSelect, to } = req.body;
+
+  if (!question || !Array.isArray(options) || options.length < 2) {
+    return res.status(400).send("❌ Invalid payload: need question (string) and options (array with 2+ items)");
+  }
+
+  if (options.length > 12) {
+    return res.status(400).send("❌ WhatsApp polls support a maximum of 12 options");
+  }
+
+  const target = to || process.env.WHATSAPP_GROUP_ID;
+  if (!target) return res.status(400).send("Missing target (to) and WHATSAPP_GROUP_ID not set");
+  if (!target.includes("@")) {
+    return res.status(400).send("Invalid WhatsApp target. Must be a full chat id like 12345@g.us");
+  }
+
+  try {
+    const ok = await ensureConnected();
+    if (!ok) throw new Error(`WhatsApp not connected (state: ${lastState || "unknown"})`);
+
+    const poll = new Poll(question, options, { allowMultipleAnswers: !!allowMultiSelect });
+    await waClient.sendMessage(target, poll);
+    console.log(`✅ WhatsApp poll sent: "${question}" with ${options.length} options`);
+    res.send("ok");
+  } catch (err) {
+    console.error("❌ Failed to send WhatsApp poll:", err.message);
+    res.status(500).send(err.message || "fail");
+  }
+});
+
 // Discord ➜ Trigger season leaderboard (kept intact)
 app.post("/trigger-season", async (req, res) => {
   const db = require("../bot/utils/firebase");
@@ -373,7 +448,7 @@ app.post("/trigger-season", async (req, res) => {
       timestamp: new Date().toISOString(),
     };
 
-    await fetch(process.env.DISCORD_WEBHOOK_URL, {
+    await globalThis.fetch(process.env.DISCORD_WEBHOOK_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ embeds: [embed] }),
