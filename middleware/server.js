@@ -266,6 +266,101 @@ const attachHandlers = (client) => {
       body: message.body?.slice?.(0, 200),
     });
   });
+
+  // 📊 Track WhatsApp poll votes and update Discord embed
+  client.on("vote_update", async (vote) => {
+    try {
+      // Extract poll message ID from vote
+      const pollMsgId = vote.parentMsgKey?._serialized
+        || vote.parentMessage?.id?._serialized;
+
+      if (!pollMsgId) {
+        console.log("📊 vote_update: could not extract poll message ID");
+        if (WA_DEBUG) console.log("📊 vote_update raw:", JSON.stringify(vote, null, 2).slice(0, 500));
+        return;
+      }
+
+      console.log(`📊 Vote received for poll ${pollMsgId}`);
+
+      // Check if this poll is tracked in Firebase
+      const pollDoc = await db.collection("kpvPolls").doc(pollMsgId).get();
+      if (!pollDoc.exists) {
+        console.log("📊 Poll not tracked, ignoring vote");
+        return;
+      }
+
+      // Get voter name — resolve from users collection if linked
+      const voterId = vote.voter || vote.sender;
+      let voterName = "Unknown";
+      let voterDiscordId = null;
+      try {
+        if (voterId) {
+          // Extract phone number from WA ID (e.g. "358401234567@c.us" → "358401234567")
+          const phoneNumber = voterId.replace(/@.*/, "");
+
+          // Look up in users collection by whatsappId
+          const usersSnap = await db.collection("users")
+            .where("whatsappId", "==", phoneNumber)
+            .limit(1)
+            .get();
+
+          if (!usersSnap.empty) {
+            const userData = usersSnap.docs[0].data();
+            voterName = userData.preferredName || userData.hltvName || phoneNumber;
+            voterDiscordId = userData.discordId || null;
+          } else {
+            // Fallback to WhatsApp contact name
+            const contact = await client.getContactById(voterId);
+            voterName = contact?.pushname || contact?.name || contact?.shortName || phoneNumber;
+          }
+        }
+      } catch (e) {
+        console.warn("⚠️ Could not resolve voter name:", e?.message);
+        if (voterId) voterName = voterId.replace(/@.*/, "");
+      }
+
+      // Use Discord mention if available, otherwise plain name
+      const displayName = voterDiscordId ? `<@${voterDiscordId}>` : voterName;
+
+      // Get selected options
+      const selectedOptions = vote.selectedOptions || [];
+      const selectedName = selectedOptions.length > 0 ? selectedOptions[0].name : null;
+
+      console.log(`📊 ${voterName} voted: ${selectedName || "(deselected)"}`);
+
+      // Update votes in Firebase
+      const pollData = pollDoc.data();
+      const votes = pollData.votes || {};
+
+      // Remove voter from all options first (by voterId to handle name changes)
+      for (const opt of Object.keys(votes)) {
+        votes[opt] = (votes[opt] || []).filter((n) => n !== displayName && n !== voterName);
+      }
+
+      // Add voter to their selected option
+      if (selectedName) {
+        if (!votes[selectedName]) votes[selectedName] = [];
+        if (!votes[selectedName].includes(displayName)) {
+          votes[selectedName].push(displayName);
+        }
+      }
+
+      await pollDoc.ref.update({ votes, lastVoteAt: Date.now() });
+
+      // Update Discord embed
+      const { discordMessageId, discordChannelId, question, game, date, time } = pollData;
+      if (discordMessageId && discordChannelId && process.env.DISCORD_TOKEN) {
+        try {
+          await updateDiscordKpvEmbed(discordChannelId, discordMessageId, question, game, date, time, votes);
+          console.log("✅ Discord embed updated with new votes");
+        } catch (discErr) {
+          console.error("❌ Failed to update Discord embed:", discErr?.message);
+        }
+      }
+    } catch (err) {
+      console.error("❌ vote_update error:", err?.message || err);
+    }
+  });
 };
 
 waClient = createClient();
@@ -397,12 +492,13 @@ app.post("/send-poll", async (req, res) => {
     if (!ok) throw new Error(`WhatsApp not connected (state: ${lastState || "unknown"})`);
 
     const poll = new Poll(question, options, { allowMultipleAnswers: !!allowMultiSelect });
-    await waClient.sendMessage(target, poll);
-    console.log(`✅ WhatsApp poll sent: "${question}" with ${options.length} options`);
-    res.send("ok");
+    const sentMsg = await waClient.sendMessage(target, poll);
+    const messageId = sentMsg?.id?._serialized || null;
+    console.log(`✅ WhatsApp poll sent: "${question}" (id: ${messageId})`);
+    res.json({ ok: true, messageId });
   } catch (err) {
     console.error("❌ Failed to send WhatsApp poll:", err.message);
-    res.status(500).send(err.message || "fail");
+    res.status(500).json({ ok: false, error: err.message || "fail" });
   }
 });
 
@@ -461,6 +557,53 @@ app.post("/trigger-season", async (req, res) => {
     res.status(500).send("fail");
   }
 });
+
+/* -------------------- Discord embed updater -------------------- */
+const KPV_POLL_OPTIONS = [
+  '✅ Olen mukana!',
+  '🕐 Tulen myöhemmin',
+  '🤔 Ehkä',
+  '❌ En pääse',
+];
+
+async function updateDiscordKpvEmbed(channelId, messageId, question, game, date, time, votes) {
+  const fields = KPV_POLL_OPTIONS.map((opt) => {
+    const voters = votes?.[opt] || [];
+    const count = voters.length;
+    const names = count > 0 ? voters.join(', ') : '—';
+    return { name: `${opt} (${count})`, value: names, inline: false };
+  });
+
+  const infoParts = [];
+  if (date) infoParts.push(`📅 ${date}`);
+  if (game) infoParts.push(`🎮 ${game}`);
+  if (time) infoParts.push(`🕐 ${time}`);
+
+  const embed = {
+    title: question,
+    color: 0x25D366,
+    thumbnail: { url: 'https://i.imgur.com/STR5Ww3.png' },
+    description: infoParts.length ? infoParts.join('  •  ') : undefined,
+    fields,
+    footer: { text: '📲 Äänestä WhatsAppissa! • Päivittyy automaattisesti' },
+    timestamp: new Date().toISOString(),
+  };
+
+  const url = `https://discord.com/api/v10/channels/${channelId}/messages/${messageId}`;
+  const res = await globalThis.fetch(url, {
+    method: 'PATCH',
+    headers: {
+      'Authorization': `Bot ${process.env.DISCORD_TOKEN}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ embeds: [embed] }),
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Discord API ${res.status}: ${text}`);
+  }
+}
 
 /* -------------------- start server -------------------- */
 const PORT = process.env.WA_PORT || 3001;

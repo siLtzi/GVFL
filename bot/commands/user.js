@@ -24,6 +24,10 @@ module.exports = {
         .addUserOption(opt =>
           opt.setName('discord')
             .setDescription('Discord user (optional)')
+            .setRequired(false))
+        .addStringOption(opt =>
+          opt.setName('whatsapp')
+            .setDescription('WhatsApp phone number, e.g. 358401234567')
             .setRequired(false)))
     .addSubcommand(sub =>
       sub.setName('edit')
@@ -39,6 +43,10 @@ module.exports = {
         .addUserOption(opt =>
           opt.setName('newdiscord')
             .setDescription('New Discord user')
+            .setRequired(false))
+        .addStringOption(opt =>
+          opt.setName('newwhatsapp')
+            .setDescription('New WhatsApp phone number, e.g. 358401234567')
             .setRequired(false)))
     .addSubcommand(sub =>
       sub.setName('delete')
@@ -71,7 +79,8 @@ module.exports = {
       const lines = usersSnap.docs.map(doc => {
         const data = doc.data();
         const discord = data.discordId ? ` → <@${data.discordId}>` : '';
-        return `• **${data.preferredName}** (HLTV: \`${data.hltvName}\`)${discord}`;
+        const wa = data.whatsappId ? ` 📲 \`${data.whatsappId}\`` : '';
+        return `• **${data.preferredName}** (HLTV: \`${data.hltvName}\`)${discord}${wa}`;
       });
 
       const embed = new EmbedBuilder()
@@ -86,6 +95,7 @@ module.exports = {
       const preferred = interaction.options.getString('preferred');
       const hltv = interaction.options.getString('hltv');
       const discordUser = interaction.options.getUser('discord');
+      const whatsapp = interaction.options.getString('whatsapp');
 
       const existingDoc = await db.collection('users').doc(preferred).get();
       if (existingDoc.exists) {
@@ -99,6 +109,7 @@ module.exports = {
         hltvName: hltv,
         discordName: discordUser?.username || null,
         discordId: discordUser?.id || null,
+        whatsappId: whatsapp ? whatsapp.replace(/[^0-9]/g, '') : null,
         createdAt: new Date(),
       });
 
@@ -110,6 +121,7 @@ module.exports = {
       const preferred = interaction.options.getString('preferred');
       const newHltv = interaction.options.getString('newhltv');
       const newDiscordUser = interaction.options.getUser('newdiscord');
+      const newWhatsapp = interaction.options.getString('newwhatsapp');
 
       const userRef = db.collection('users').doc(preferred);
       const userDoc = await userRef.get();
@@ -125,6 +137,9 @@ module.exports = {
       if (newDiscordUser) {
         updates.discordName = newDiscordUser.username;
         updates.discordId = newDiscordUser.id;
+      }
+      if (newWhatsapp) {
+        updates.whatsappId = newWhatsapp.replace(/[^0-9]/g, '');
       }
 
       if (Object.keys(updates).length === 0) {
