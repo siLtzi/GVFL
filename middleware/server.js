@@ -600,15 +600,16 @@ async function checkActiveKpvPolls() {
   if (!ready || !waClient) return;
 
   try {
-    const snapshot = await db.collection("kpvPolls")
-      .where("closed", "!=", true)
-      .get();
+    const snapshot = await db.collection("kpvPolls").get();
 
     if (snapshot.empty) return;
 
     for (const doc of snapshot.docs) {
       const pollData = doc.data();
       const waMessageId = doc.id;
+
+      // Skip already-closed polls
+      if (pollData.closed === true) continue;
 
       // Skip polls older than 24 hours
       if (pollData.createdAt && Date.now() - pollData.createdAt > 24 * 60 * 60 * 1000) {
@@ -710,7 +711,7 @@ async function updateDiscordKpvEmbed(channelId, messageId, question, game, date,
     thumbnail: { url: 'https://i.imgur.com/STR5Ww3.png' },
     description: infoParts.length ? infoParts.join('  •  ') : undefined,
     fields,
-    footer: { text: '📲 Äänestä WhatsAppissa! • Päivittyy automaattisesti' },
+    footer: { text: '📲 Äänestä WhatsAppissa tai reagoi tähän! • Päivittyy automaattisesti' },
     timestamp: new Date().toISOString(),
   };
 

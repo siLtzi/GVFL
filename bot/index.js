@@ -15,7 +15,14 @@ require("dotenv").config();
 const db = require("./utils/firebase");
 const { HLTV } = require("hltv");
 
-const client = new Client({ intents: [GatewayIntentBits.Guilds] });
+const client = new Client({
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.GuildMessageReactions,
+  ],
+  partials: ['MESSAGE', 'REACTION', 'USER'],
+});
 client.commands = new Collection();
 client.autocompleteHandlers = new Collection();
 
@@ -168,6 +175,155 @@ async function checkForUpcomingEvents(client, db) {
     console.error("HLTV Event Fetch Error:", err);
   }
 }
+
+/* -------------------- KPV reaction voting -------------------- */
+const { POLL_OPTIONS } = require('./commands/kpv');
+
+// Map reaction emoji to poll option
+const REACTION_TO_OPTION = {
+  '✅': POLL_OPTIONS[0],  // ✅ Olen mukana!
+  '🕐': POLL_OPTIONS[1],  // 🕐 Tulen myöhemmin
+  '🤔': POLL_OPTIONS[2],  // 🤔 Ehkä
+  '❌': POLL_OPTIONS[3],  // ❌ En pääse
+};
+const KPV_REACTION_EMOJIS = Object.keys(REACTION_TO_OPTION);
+
+client.on('messageReactionAdd', async (reaction, user) => {
+  if (user.bot) return;
+
+  // Handle partial reactions (from uncached messages)
+  if (reaction.partial) {
+    try { await reaction.fetch(); } catch { return; }
+  }
+  if (reaction.message.partial) {
+    try { await reaction.message.fetch(); } catch { return; }
+  }
+
+  const emoji = reaction.emoji.name;
+  const option = REACTION_TO_OPTION[emoji];
+  if (!option) return;
+
+  const messageId = reaction.message.id;
+
+  // Check if this Discord message is a tracked KPV poll
+  try {
+    const pollSnap = await db.collection('kpvPolls')
+      .where('discordMessageId', '==', messageId)
+      .limit(1)
+      .get();
+
+    if (pollSnap.empty) return;
+
+    const pollDoc = pollSnap.docs[0];
+    const pollData = pollDoc.data();
+    if (pollData.closed === true) return;
+
+    const votes = pollData.votes || {};
+    const userMention = `<@${user.id}>`;
+
+    // Check if this user already voted in ANY option (WA or Discord)
+    let alreadyInOption = null;
+    for (const [opt, voters] of Object.entries(votes)) {
+      if (voters.includes(userMention)) {
+        alreadyInOption = opt;
+        break;
+      }
+    }
+
+    if (alreadyInOption === option) {
+      // Already voted for this exact option — do nothing
+      return;
+    }
+
+    // Remove from old option if switching vote
+    if (alreadyInOption && votes[alreadyInOption]) {
+      votes[alreadyInOption] = votes[alreadyInOption].filter(v => v !== userMention);
+      if (votes[alreadyInOption].length === 0) delete votes[alreadyInOption];
+    }
+
+    // Remove their reactions from other options
+    for (const otherEmoji of KPV_REACTION_EMOJIS) {
+      if (otherEmoji === emoji) continue;
+      const otherReaction = reaction.message.reactions.cache.get(otherEmoji);
+      if (otherReaction) {
+        try { await otherReaction.users.remove(user.id); } catch {}
+      }
+    }
+
+    // Add to the new option
+    if (!votes[option]) votes[option] = [];
+    if (!votes[option].includes(userMention)) {
+      votes[option].push(userMention);
+    }
+
+    // Save to Firebase
+    await pollDoc.ref.update({ votes, lastVoteAt: Date.now() });
+
+    // Update the embed
+    const { buildKpvEmbed } = require('./commands/kpv');
+    const embed = buildKpvEmbed(pollData.question, pollData.game, pollData.date, pollData.time, votes);
+    try {
+      await reaction.message.edit({ embeds: [embed] });
+      console.log(`✅ KPV embed updated via Discord reaction by ${user.tag}`);
+    } catch (editErr) {
+      console.error('❌ Failed to edit KPV embed:', editErr.message);
+    }
+  } catch (err) {
+    console.error('❌ KPV reaction handler error:', err.message);
+  }
+});
+
+client.on('messageReactionRemove', async (reaction, user) => {
+  if (user.bot) return;
+
+  if (reaction.partial) {
+    try { await reaction.fetch(); } catch { return; }
+  }
+  if (reaction.message.partial) {
+    try { await reaction.message.fetch(); } catch { return; }
+  }
+
+  const emoji = reaction.emoji.name;
+  const option = REACTION_TO_OPTION[emoji];
+  if (!option) return;
+
+  const messageId = reaction.message.id;
+
+  try {
+    const pollSnap = await db.collection('kpvPolls')
+      .where('discordMessageId', '==', messageId)
+      .limit(1)
+      .get();
+
+    if (pollSnap.empty) return;
+
+    const pollDoc = pollSnap.docs[0];
+    const pollData = pollDoc.data();
+    if (pollData.closed === true) return;
+
+    const votes = pollData.votes || {};
+    const userMention = `<@${user.id}>`;
+
+    // Remove from this option if present
+    if (votes[option] && votes[option].includes(userMention)) {
+      votes[option] = votes[option].filter(v => v !== userMention);
+      if (votes[option].length === 0) delete votes[option];
+
+      await pollDoc.ref.update({ votes, lastVoteAt: Date.now() });
+
+      const { buildKpvEmbed } = require('./commands/kpv');
+      const embed = buildKpvEmbed(pollData.question, pollData.game, pollData.date, pollData.time, votes);
+      try {
+        await reaction.message.edit({ embeds: [embed] });
+        console.log(`✅ KPV embed updated via reaction removal by ${user.tag}`);
+      } catch (editErr) {
+        console.error('❌ Failed to edit KPV embed:', editErr.message);
+      }
+    }
+  } catch (err) {
+    console.error('❌ KPV reaction remove handler error:', err.message);
+  }
+});
 
 client.once("ready", () => {
   console.log(`✅ Discord bot is online as ${client.user.tag}`);

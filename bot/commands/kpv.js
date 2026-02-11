@@ -35,7 +35,7 @@ function buildKpvEmbed(question, game, date, time, votes) {
     embed.setDescription(infoParts.join('  •  '));
   }
 
-  embed.setFooter({ text: '📲 Äänestä WhatsAppissa! • Päivittyy automaattisesti' });
+  embed.setFooter({ text: '📲 Äänestä WhatsAppissa tai reagoi tähän! • Päivittyy automaattisesti' });
   embed.setTimestamp();
   return embed;
 }
@@ -153,6 +153,15 @@ module.exports = {
       // Post the live-updating embed in Discord
       const embed = buildKpvEmbed(question, game, dateStr, time, {});
       const discordMsg = await interaction.editReply({ embeds: [embed] });
+
+      // Add reaction emojis for Discord voting
+      try {
+        for (const emoji of ['✅', '🕐', '🤔', '❌']) {
+          await discordMsg.react(emoji);
+        }
+      } catch (reactErr) {
+        console.warn('[kpv] Failed to add reactions:', reactErr.message);
+      }
 
       // Save poll tracking data to Firebase
       if (waMessageId) {
