@@ -105,6 +105,7 @@ const attachHandlers = (client) => {
     ready = true;
     console.log("✅ WhatsApp ready and connected!");
     console.log("👤 Logged in as:", client.info?.pushname || client.info?.wid?.user || "unknown");
+    startKpvPollChecker();
   });
 
   client.on("change_state", (state) => {
@@ -269,6 +270,7 @@ const attachHandlers = (client) => {
 
   // 📊 Track WhatsApp poll votes and update Discord embed
   client.on("vote_update", async (vote) => {
+    console.log("📊 vote_update event fired!");
     try {
       // Extract poll message ID from vote
       const pollMsgId = vote.parentMsgKey?._serialized
@@ -557,6 +559,129 @@ app.post("/trigger-season", async (req, res) => {
     res.status(500).send("fail");
   }
 });
+
+/* -------------------- KPV poll vote checker -------------------- */
+async function resolveVoterName(waClient, voterId) {
+  let voterName = "Unknown";
+  let voterDiscordId = null;
+
+  if (!voterId) return { voterName, voterDiscordId, displayName: voterName };
+
+  const phoneNumber = voterId.replace(/@.*/, "");
+
+  try {
+    const usersSnap = await db.collection("users")
+      .where("whatsappId", "==", phoneNumber)
+      .limit(1)
+      .get();
+
+    if (!usersSnap.empty) {
+      const userData = usersSnap.docs[0].data();
+      voterName = userData.preferredName || userData.hltvName || phoneNumber;
+      voterDiscordId = userData.discordId || null;
+    } else {
+      try {
+        const contact = await waClient.getContactById(voterId);
+        voterName = contact?.pushname || contact?.name || contact?.shortName || phoneNumber;
+      } catch {
+        voterName = phoneNumber;
+      }
+    }
+  } catch (e) {
+    console.warn("⚠️ resolveVoterName error:", e?.message);
+    voterName = phoneNumber;
+  }
+
+  const displayName = voterDiscordId ? `<@${voterDiscordId}>` : voterName;
+  return { voterName, voterDiscordId, displayName };
+}
+
+async function checkActiveKpvPolls() {
+  if (!ready || !waClient) return;
+
+  try {
+    const snapshot = await db.collection("kpvPolls")
+      .where("closed", "!=", true)
+      .get();
+
+    if (snapshot.empty) return;
+
+    for (const doc of snapshot.docs) {
+      const pollData = doc.data();
+      const waMessageId = doc.id;
+
+      // Skip polls older than 24 hours
+      if (pollData.createdAt && Date.now() - pollData.createdAt > 24 * 60 * 60 * 1000) {
+        await doc.ref.update({ closed: true });
+        console.log(`📊 Auto-closed old KPV poll: ${waMessageId}`);
+        continue;
+      }
+
+      try {
+        const pollVotes = await waClient.getPollVotes(waMessageId);
+        if (!pollVotes || pollVotes.length === 0) continue;
+
+        // Build votes map from all current votes
+        const newVotes = {};
+
+        for (const pv of pollVotes) {
+          const voterId = pv.voter || pv.sender;
+          const selectedOptions = pv.selectedOptions || [];
+
+          if (selectedOptions.length === 0) continue;
+
+          const { displayName } = await resolveVoterName(waClient, voterId);
+          const selectedName = selectedOptions[0].name;
+
+          if (!newVotes[selectedName]) newVotes[selectedName] = [];
+          if (!newVotes[selectedName].includes(displayName)) {
+            newVotes[selectedName].push(displayName);
+          }
+        }
+
+        // Check if votes changed
+        const oldVotes = pollData.votes || {};
+        const oldJson = JSON.stringify(oldVotes);
+        const newJson = JSON.stringify(newVotes);
+
+        if (oldJson === newJson) continue;
+
+        console.log(`📊 Poll votes changed for ${waMessageId}`);
+
+        // Update Firebase
+        await doc.ref.update({ votes: newVotes, lastVoteAt: Date.now() });
+
+        // Update Discord embed
+        const { discordMessageId, discordChannelId, question, game, date, time } = pollData;
+        if (discordMessageId && discordChannelId && process.env.DISCORD_TOKEN) {
+          try {
+            await updateDiscordKpvEmbed(discordChannelId, discordMessageId, question, game, date, time, newVotes);
+            console.log("✅ Discord KPV embed updated via polling");
+          } catch (discErr) {
+            console.error("❌ Failed to update Discord embed:", discErr?.message);
+          }
+        }
+      } catch (err) {
+        // getPollVotes may fail if message is too old or deleted
+        if (err?.message?.includes("Could not get poll votes")) {
+          await doc.ref.update({ closed: true });
+        } else {
+          console.error(`❌ Error checking poll ${waMessageId}:`, err?.message);
+        }
+      }
+    }
+  } catch (err) {
+    console.error("❌ checkActiveKpvPolls error:", err?.message);
+  }
+}
+
+// Start checking active polls every 30 seconds once WhatsApp is ready
+let kpvPollInterval = null;
+function startKpvPollChecker() {
+  if (kpvPollInterval) return;
+  kpvPollInterval = setInterval(checkActiveKpvPolls, 30 * 1000);
+  console.log("📊 KPV poll vote checker started (every 30s)");
+}
 
 /* -------------------- Discord embed updater -------------------- */
 const KPV_POLL_OPTIONS = [
