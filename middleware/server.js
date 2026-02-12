@@ -47,6 +47,7 @@ const startStatePolling = (reason) => {
         ready = true;
         console.log("✅ WhatsApp connected (state polling)");
         console.log("👤 Logged in as:", waClient.info?.pushname || waClient.info?.wid?.user || "unknown");
+        startKpvPollChecker();
         clearInterval(statePoll);
         statePoll = null;
       }
