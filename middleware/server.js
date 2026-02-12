@@ -711,14 +711,14 @@ async function checkActiveKpvPolls() {
           }
         }
 
-        // Merge: keep Discord-only votes (those starting with <@) that aren't in WA votes
+        // Merge: only keep Discord-reaction voters (mentions like <@123>) from old votes
         const oldVotes = pollData.votes || {};
         const newVotes = { ...waVotes };
 
         for (const [option, voters] of Object.entries(oldVotes)) {
           for (const voter of voters) {
-            // Keep Discord-reaction voters (they won't appear in WA votes)
-            // A voter is Discord-only if it's a mention AND not already in WA votes for any option
+            // Only preserve actual Discord mentions — plain names are old WA resolutions
+            if (!voter.startsWith('<@')) continue;
             const isInWaVotes = Object.values(waVotes).some(arr => arr.includes(voter));
             if (!isInWaVotes) {
               if (!newVotes[option]) newVotes[option] = [];
