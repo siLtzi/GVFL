@@ -562,11 +562,16 @@ app.post("/trigger-season", async (req, res) => {
 });
 
 /* -------------------- KPV poll vote checker -------------------- */
+const voterNameCache = new Map(); // voterId -> { voterName, voterDiscordId, displayName }
+
 async function resolveVoterName(waClient, voterId) {
   let voterName = "Unknown";
   let voterDiscordId = null;
 
   if (!voterId) return { voterName, voterDiscordId, displayName: voterName };
+
+  // Return cached result if available
+  if (voterNameCache.has(voterId)) return voterNameCache.get(voterId);
 
   const rawId = voterId.replace(/@.*/, "");
 
@@ -635,7 +640,9 @@ async function resolveVoterName(waClient, voterId) {
   }
 
   const displayName = voterDiscordId ? `<@${voterDiscordId}>` : voterName;
-  return { voterName, voterDiscordId, displayName };
+  const result = { voterName, voterDiscordId, displayName };
+  voterNameCache.set(voterId, result);
+  return result;
 }
 
 async function checkActiveKpvPolls() {
@@ -771,8 +778,8 @@ function startKpvPollChecker() {
   console.log("📊 KPV poll vote checker starting...");
   // Run immediately on first start, then every 30s
   checkActiveKpvPolls();
-  kpvPollInterval = setInterval(checkActiveKpvPolls, 30 * 1000);
-  console.log("📊 KPV poll vote checker started (every 30s)");
+  kpvPollInterval = setInterval(checkActiveKpvPolls, 60 * 1000);
+  console.log("📊 KPV poll vote checker started (every 60s)");
 }
 
 /* -------------------- Discord embed updater -------------------- */
