@@ -568,29 +568,70 @@ async function resolveVoterName(waClient, voterId) {
 
   if (!voterId) return { voterName, voterDiscordId, displayName: voterName };
 
-  const phoneNumber = voterId.replace(/@.*/, "");
+  const rawId = voterId.replace(/@.*/, "");
 
   try {
-    const usersSnap = await db.collection("users")
-      .where("whatsappId", "==", phoneNumber)
+    // 1. Try matching by whatsappId directly (works for @c.us IDs)
+    let usersSnap = await db.collection("users")
+      .where("whatsappId", "==", rawId)
       .limit(1)
       .get();
 
     if (!usersSnap.empty) {
       const userData = usersSnap.docs[0].data();
-      voterName = userData.preferredName || userData.hltvName || phoneNumber;
+      voterName = userData.preferredName || userData.hltvName || rawId;
       voterDiscordId = userData.discordId || null;
     } else {
+      // 2. Get the WA contact — try to extract their real phone number
+      let contact = null;
       try {
-        const contact = await waClient.getContactById(voterId);
-        voterName = contact?.pushname || contact?.name || contact?.shortName || phoneNumber;
-      } catch {
-        voterName = phoneNumber;
+        contact = await waClient.getContactById(voterId);
+      } catch {}
+
+      // The contact might have a phone number we can match against whatsappId
+      const contactNumber = contact?.number || contact?.id?.user || null;
+
+      if (contactNumber && contactNumber !== rawId) {
+        // Retry DB lookup with the actual phone number
+        usersSnap = await db.collection("users")
+          .where("whatsappId", "==", contactNumber)
+          .limit(1)
+          .get();
+
+        if (!usersSnap.empty) {
+          const userData = usersSnap.docs[0].data();
+          voterName = userData.preferredName || userData.hltvName || contactNumber;
+          voterDiscordId = userData.discordId || null;
+        }
+      }
+
+      // 3. If still no match, try getNumberId to resolve LID → phone
+      if (!voterDiscordId) {
+        try {
+          const numId = await waClient.getNumberId(rawId);
+          if (numId?.user) {
+            usersSnap = await db.collection("users")
+              .where("whatsappId", "==", numId.user)
+              .limit(1)
+              .get();
+
+            if (!usersSnap.empty) {
+              const userData = usersSnap.docs[0].data();
+              voterName = userData.preferredName || userData.hltvName || numId.user;
+              voterDiscordId = userData.discordId || null;
+            }
+          }
+        } catch {}
+      }
+
+      // 4. Fallback: use contact pushname
+      if (!voterDiscordId) {
+        voterName = contact?.pushname || contact?.name || contact?.shortName || rawId;
       }
     }
   } catch (e) {
     console.warn("⚠️ resolveVoterName error:", e?.message);
-    voterName = phoneNumber;
+    voterName = rawId;
   }
 
   const displayName = voterDiscordId ? `<@${voterDiscordId}>` : voterName;
