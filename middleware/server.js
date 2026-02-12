@@ -597,14 +597,23 @@ async function resolveVoterName(waClient, voterId) {
 }
 
 async function checkActiveKpvPolls() {
-  if (!ready || !waClient) return;
+  if (!ready || !waClient) {
+    console.log("📊 Poll check skipped — ready:", ready, "waClient:", !!waClient);
+    return;
+  }
 
   try {
     const snapshot = await db.collection("kpvPolls").get();
 
-    if (snapshot.empty) return;
+    if (snapshot.empty) {
+      console.log("📊 No KPV polls found in Firebase");
+      return;
+    }
 
-    for (const doc of snapshot.docs) {
+    const activeDocs = snapshot.docs.filter(d => d.data().closed !== true);
+    console.log(`📊 Checking ${activeDocs.length} active KPV poll(s) (${snapshot.size} total)`);
+
+    for (const doc of activeDocs) {
       const pollData = doc.data();
       const waMessageId = doc.id;
 
@@ -618,12 +627,32 @@ async function checkActiveKpvPolls() {
         continue;
       }
 
+      console.log(`📊 Fetching votes for poll: ${waMessageId}`);
+
       try {
-        const pollVotes = await waClient.getPollVotes(waMessageId);
+        // Try client.getPollVotes first, fall back to message.getPollVotes
+        let pollVotes = [];
+        try {
+          pollVotes = await waClient.getPollVotes(waMessageId);
+        } catch (e) {
+          console.log(`📊 client.getPollVotes failed (${typeof e === 'string' ? e : e?.message}), trying message method...`);
+          // Fallback: get the message object and call getPollVotes on it
+          try {
+            const msg = await waClient.getMessageById(waMessageId);
+            if (msg && typeof msg.getPollVotes === 'function') {
+              pollVotes = await msg.getPollVotes();
+            }
+          } catch (e2) {
+            console.log(`📊 message.getPollVotes also failed: ${e2?.message || e2}`);
+          }
+        }
+
+        console.log(`📊 Got ${pollVotes?.length || 0} vote(s) for poll ${waMessageId}`);
+
         if (!pollVotes || pollVotes.length === 0) continue;
 
-        // Build votes map from all current votes
-        const newVotes = {};
+        // Build votes map from WA votes
+        const waVotes = {};
 
         for (const pv of pollVotes) {
           const voterId = pv.voter || pv.sender;
@@ -634,14 +663,29 @@ async function checkActiveKpvPolls() {
           const { displayName } = await resolveVoterName(waClient, voterId);
           const selectedName = selectedOptions[0].name;
 
-          if (!newVotes[selectedName]) newVotes[selectedName] = [];
-          if (!newVotes[selectedName].includes(displayName)) {
-            newVotes[selectedName].push(displayName);
+          if (!waVotes[selectedName]) waVotes[selectedName] = [];
+          if (!waVotes[selectedName].includes(displayName)) {
+            waVotes[selectedName].push(displayName);
           }
         }
 
-        // Check if votes changed
+        // Merge: keep Discord-only votes (those starting with <@) that aren't in WA votes
         const oldVotes = pollData.votes || {};
+        const newVotes = { ...waVotes };
+
+        for (const [option, voters] of Object.entries(oldVotes)) {
+          for (const voter of voters) {
+            // Keep Discord-reaction voters (they won't appear in WA votes)
+            // A voter is Discord-only if it's a mention AND not already in WA votes for any option
+            const isInWaVotes = Object.values(waVotes).some(arr => arr.includes(voter));
+            if (!isInWaVotes) {
+              if (!newVotes[option]) newVotes[option] = [];
+              if (!newVotes[option].includes(voter)) {
+                newVotes[option].push(voter);
+              }
+            }
+          }
+        }
         const oldJson = JSON.stringify(oldVotes);
         const newJson = JSON.stringify(newVotes);
 
@@ -664,15 +708,17 @@ async function checkActiveKpvPolls() {
         }
       } catch (err) {
         // getPollVotes may fail if message is too old or deleted
-        if (err?.message?.includes("Could not get poll votes")) {
+        const errMsg = typeof err === 'string' ? err : err?.message;
+        if (errMsg?.includes("Could not get poll votes") || errMsg?.includes("Invalid usage")) {
+          console.log(`📊 Poll ${waMessageId} can't be read, closing it`);
           await doc.ref.update({ closed: true });
         } else {
-          console.error(`❌ Error checking poll ${waMessageId}:`, err?.message);
+          console.error(`❌ Error checking poll ${waMessageId}:`, errMsg || err);
         }
       }
     }
   } catch (err) {
-    console.error("❌ checkActiveKpvPolls error:", err?.message);
+    console.error("❌ checkActiveKpvPolls error:", err?.message || err);
   }
 }
 
@@ -680,6 +726,9 @@ async function checkActiveKpvPolls() {
 let kpvPollInterval = null;
 function startKpvPollChecker() {
   if (kpvPollInterval) return;
+  console.log("📊 KPV poll vote checker starting...");
+  // Run immediately on first start, then every 30s
+  checkActiveKpvPolls();
   kpvPollInterval = setInterval(checkActiveKpvPolls, 30 * 1000);
   console.log("📊 KPV poll vote checker started (every 30s)");
 }
