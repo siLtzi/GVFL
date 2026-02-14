@@ -2,6 +2,7 @@ const {
   Client,
   Collection,
   GatewayIntentBits,
+  Partials,
   REST,
   Routes,
   EmbedBuilder,
@@ -21,7 +22,7 @@ const client = new Client({
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.GuildMessageReactions,
   ],
-  partials: ['MESSAGE', 'REACTION', 'USER'],
+  partials: [Partials.Message, Partials.Reaction, Partials.User],
 });
 client.commands = new Collection();
 client.autocompleteHandlers = new Collection();
